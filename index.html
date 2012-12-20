@@ -1,0 +1,80 @@
+<!DOCTYPE HTML>
+<!--  ==================================================================== -->
+<!--  NAME: index.html                                                     -->
+<!--  AUTH: Scott Shattuck (ss)                                            -->
+<!--  NOTE: Copyright (C) 2012 Scott Shattuck, All Rights Reserved.        -->
+<!--  ==================================================================== -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+
+<title>Web Application Engineer Challenge</title>
+
+<!-- Google Web Font(s) for enhancing the UI beyond stock fonts without images -->
+<link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,300,400' rel='stylesheet' type='text/css'>
+
+<link rel="stylesheet"  href="css/blackjack.css">
+
+</head>
+
+<body onload="B.init({min: 1, max: 100, holdings: 500})">
+
+<div id="bg">
+
+  <div id="header" class="noselect">
+    <img id="logo" src="images/twitter-bird-dark-bgs.png"
+      title="Logo" alt="logo"/>
+    <div id="title">
+      <p class="appname noselect">WEB ENGINEER CHALLENGE - BLACKJACK</p>
+    </div>
+  </div>
+
+  <div id="content">
+    <div id="gameboard" class="noselect">
+      <div id="limits" class="noselect">
+        <p class="min">Minimum<span>$5</span></p>
+        <p class="max">Maximum<span>$100</span></p>
+      </div>
+      <div id="discards" class="noselect">
+        <div class="deck"></div>
+      </div>
+      <div id="tray" class="noselect">
+        <ul id="chip-slots">
+          <li></li>
+          <li></li>
+          <li></li>
+          <li></li>
+          <li></li>
+          <li></li>
+          <li></li>
+          <li></li>
+        </ul>
+      </div>
+      <div id="shoe" class="noselect">
+      </div>
+      <div id="rules" class="noselect">
+      </div>
+      <canvas id="canvas" class="noselect"></canvas>
+      <div id="bets" class="noselect">
+      </div>
+      <div id="chips" class="noselect">
+      </div>
+    </div>
+  </div>
+
+  <div id="footer" class="noselect">
+    <div id="log"></div>
+  </div>
+
+</div>
+
+</body>
+
+<!-- Under normal circumstances these files would be concatenated/minified -->
+<script src="node_modules/d3/d3.v2.js"></script>
+<script src="deps/jquery/jquery-1.6.4.js"></script>
+<script src="deps/state-machine.js"></script>
+<script src="src/blackjack.js"></script>
+
+</html>
