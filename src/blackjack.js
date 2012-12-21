@@ -1050,9 +1050,11 @@ B.Hand.prototype.hasHoleCards = function() {
 B.Hand.prototype.hit = function(card) {
 	var c,
         fsm,
-		cards;
+		cards,
+        game;
 
-    c = card || this.getGame().getShoe().deal();
+    game = this.getGame();
+    c = card || game.getShoe().deal();
 
 	cards = this.getCards();
 	cards.push(c);
@@ -1065,6 +1067,8 @@ B.Hand.prototype.hit = function(card) {
 	if (this.getScore() > 21) {
 		this.bust();
 	}
+
+    game.renderHands();
 };
 
 
@@ -1114,7 +1118,7 @@ B.Hand.prototype.isBlackjack = function() {
     }
 
 	if (DEBUG) {
-		log('Checking ' + (this.getPlayer() ? 'player ' : 'dealer ') + 
+		log('Checking ' + (this.getPlayer() ? 'player ' : 'dealer ') +
             this.print() + ' for blackjack.');
 	}
 
@@ -1404,7 +1408,7 @@ B.Game = function(opts) {
 			{ name: 'score', from: ['dealing', 'dealer'], to: 'scoring' },
 
             // We can move properly to 'done' once we've scored the game.
-			{ name: 'done', from: 'scoring', to: 'postgame' },
+			{ name: 'done', from: ['dealer', 'scoring'], to: 'postgame' },
 
             // We can quit from anywhere.
 			{ name: 'quit', from: '*', to: 'exited' }
@@ -1589,19 +1593,23 @@ B.Game.prototype.blackjack = function(hand) {
 		log(prefix + ' Blackjack!: ' + hand.print());
 	}
 
+    my = this;
+
 	// If it's the dealer's hand we show it immediately. Only another hand with
 	// a Blackjack will avoid a loss, and those hands merely tie/push.
 	if (hand === this.getDealer()) {
 		// When it's the dealers hand we move immediately to scoring/payout.	
 		this.getFSM().blackjack();
-		this.score();
+        setTimeout(function() {
+		    my.score();
+        }, 0);
+
 	} else {
         // For player hands which transition to blackjack status we may have no
         // remaining playable hands and need to transition. The tricky part here
         // is that the dealer's hand is dealt to last, so any true blackjack on
         // the part of a player hand will cause scoring against an incomplete
         // dealer hand. We use a setTimeout to let the deal finish first.
-        my = this;
         setTimeout(function() {
             my.checkHands();
         }, 0);
@@ -1678,6 +1686,9 @@ B.Game.prototype.deal = function() {
 
 	fsm = this.getFSM();
 	fsm.deal();
+
+    // Update display for fresh visuals.
+    this.renderDeal();
 
 	// If the player can't cover the minimum bet we can't continue.
 	if (this.getPlayer().getHoldings() < this.getMinimumBet()) {
@@ -1764,35 +1775,12 @@ B.Game.prototype.getNextHand = function() {
  */
 B.Game.prototype.onafterdealer = function() {
 	var dealer,
-		shoe,
-		hands,
-		done,
-        fsm;
+		shoe;
 
 	dealer = this.getDealer();
 	dealer.show();
-	// TODO: trigger rendering update.
 
-
-	// See if we have any scorable hands. If they all busted or surrendered do
-	// we really have the dealer hit and maybe bust? Or do we just claim victory
-	// for the house and transition to done?
-	done = true;
-	hands = this.getHands();
-	hands.map(function(hand) {
-		if (hand.isScoreable()) {
-			done = false;
-		}
-	});
-
-    // No scorable hands? Dealer/house wins.
-	if (done) {
-        fsm = this.getFSM();
-        fsm.done();
-        return;
-	}
-
-    // At least one scoreable hand. Dealer must play out.
+    // Dealer must play out.
 	shoe = this.getShoe();
 	while (dealer.getScore() < 17) {
 		dealer.hit(shoe.deal());
@@ -1836,13 +1824,100 @@ B.Game.prototype.quit = function() {
 
 
 /**
+ */
+B.Game.prototype.renderDeal = function(callback) {
+    d3.selectAll('.card').remove();
+};
+
+
+/**
  * Renders the Hands being played. This method can be called multiple times as
  * the Hands change during play.
  * @param {Function} callback A function to call when rendering is finished.
  */
 B.Game.prototype.renderHands = function(callback) {
+    var dealer,
+        player,
+        cards;
 
-	// TODO:	do some d3/canvas stuff here :)
+    if (DEBUG) {
+        log('Rendering hands.');
+    }
+
+    // Render the dealer's cards.
+    dealer = this.getDealer();
+    d3.select('#dealer').selectAll('div').data(dealer.getCards()).
+        enter().append('div').
+            attr('class', 'card').
+            html(function(d) {
+                if (d.isHoleCard()) {
+                    return '<img src="images/bicycle-cards.png"' +
+                        ' width="100px" height="135px"></img>';
+                } else {
+                    return '<span class="label">' + d.getLabel() + '</span>' +
+                        '<span class="symbol">' + d.getSymbol() + '</span>';
+                }
+            });
+
+    // Until the dealer shows their hand we can skip updating. But once they
+    // show() and turn off hole card hiding we need to update.
+    if (dealer.hasHoleCards()) {
+        d3.select('#dealer .score').text('');
+    } else {
+        d3.select('#dealer').selectAll('.card').data(dealer.getCards()).
+            html(function(d) {
+                return '<span class="label">' + d.getLabel() + '</span>' +
+                    '<span class="symbol">' + d.getSymbol() + '</span>';
+            });
+        d3.select('#dealer img').attr('display', 'none');
+        d3.select('#dealer .score').text(dealer.getScore());
+    }
+
+    // Render the player's cards from an enter() perspective. New cards.
+    player = this.getHands()[0];
+    d3.select('#player').selectAll('div').data(player.getCards()).
+        enter().append('div').
+            attr('class', 'card').
+            html(function(d) {
+                 return '<span class="label">' + d.getLabel() + '</span>' +
+                    '<span class="symbol">' + d.getSymbol() + '</span>';
+            });
+    d3.select('#player .score').text(player.getScore());
+
+    // Refresh display of cards that are not new.
+    d3.select('#player').selectAll('.card').data(player.getCards()).
+        html(function(d) {
+            return '<span class="label">' + d.getLabel() + '</span>' +
+                '<span class="symbol">' + d.getSymbol() + '</span>';
+        });
+
+
+
+    // Connect event handlers.
+    d3.select('#hit').on('click',
+        function() {
+            if (player.isPlayable()) {
+                player.hit();
+            }
+        });
+    d3.select('#stand').on('click',
+        function() {
+            if (player.isPlayable()) {
+                player.stand();
+            }
+        });
+
+
+    // Update button states for visible feedback.
+    d3.select('#hit').attr('off', function(d) {
+        return !player.isPlayable();
+    });
+    d3.select('#stand').attr('off', function(d) {
+        return !player.isPlayable();
+    });
+    d3.select('#deal').attr('off', function(d) {
+        return player.isPlayable();
+    });
 
 	if (typeof callback === 'function') {
 		callback();
@@ -1855,8 +1930,30 @@ B.Game.prototype.renderHands = function(callback) {
  * @param {Function} callback A function to call when rendering is finished.
  */
 B.Game.prototype.renderTable = function(callback) {
+    var game;
 
-	// TODO:	do some d3/canvas stuff here :)
+    if (DEBUG) {
+        log('Rendering table.');
+    }
+
+    // Display the current table's limits.
+    d3.selectAll('#limits .value').
+        data([this.getMinimumBet(), this.getMaximumBet()]).
+        text(function(d, i) { return d;
+    });
+
+    game = this;
+
+    d3.select('#deal').on('click',
+        function() {
+            game.deal();
+        });
+
+    d3.select('#quit').on('click',
+        function() {
+            game.quit();
+        });
+
 
 	if (typeof callback === 'function') {
 		callback();
@@ -1888,6 +1985,8 @@ B.Game.prototype.score = function() {
 	busted = house > 21;
 	bjack = dealer.isBlackjack();
 
+    this.renderHands();
+
     log('Dealer has: ' + dealer.print());
 
 	hands = this.getHands();
@@ -1899,7 +1998,7 @@ B.Game.prototype.score = function() {
 		if (!hand.isScoreable()) {
 			return;
 		}
-    
+
 		if (hand.isBlackjack()) {
 			if (bjack) {
 				hand.push();
@@ -1922,7 +2021,7 @@ B.Game.prototype.score = function() {
 	});
 
 	// Transition to 'postgame' state.
-	fsm.done();
+	setTimeout(fsm.done.bind(fsm), 0);
 };
 
 
@@ -1977,6 +2076,10 @@ B.Game.prototype.stand = function(hand) {
 	}
 
 	this.checkHands();
+
+    // Render because once a hand stands() it's likely the Dealer will show()
+    // and begin updating their hand.
+    this.renderHands();
 };
 
 

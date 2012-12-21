@@ -32,33 +32,42 @@
 
   <div id="content">
     <div id="gameboard" class="noselect">
-      <div id="limits" class="noselect">
-        <p class="min">Minimum<span>$5</span></p>
-        <p class="max">Maximum<span>$100</span></p>
-      </div>
-      <div id="discards" class="noselect">
-        <div class="deck"></div>
-      </div>
-      <div id="tray" class="noselect">
-        <ul id="chip-slots">
-          <li></li>
-          <li></li>
-          <li></li>
-          <li></li>
-          <li></li>
-          <li></li>
-          <li></li>
-          <li></li>
-        </ul>
-      </div>
       <div id="shoe" class="noselect">
+        <img id="deck" src="images/bicycle-cards.png"/>
       </div>
-      <div id="rules" class="noselect">
+      <div id="holdings" class="noselect">
+        <span class="name noselect">Chips</span>
+        <span class="value">$</span>
       </div>
-      <canvas id="canvas" class="noselect"></canvas>
+      <div id="dealer" class="noselect">
+        <span class="name">Dealer</span>
+        <span class="score"></span>
+      </div>
+      <div id="limits" class="noselect">
+        <p><span class="label">min</span><span class="value">$5</span></p>
+        <br/>
+        <p><span class="label">max</span><span class="value">$100</span></p>
+      </div>
+      <div id="pot" class="noselect">
+        <span class="name noselect">Pot</span>
+        <span class="value">$</span>
+      </div>
       <div id="bets" class="noselect">
+        <span class="name noselect">Bets</span>
+        <button id="fifty">50</button>
+        <button id="twentyfive">25</button>
+        <button id="ten">10</button>
+        <button id="five">5</button>
       </div>
-      <div id="chips" class="noselect">
+      <div id="player" class="noselect">
+        <span class="name">Player</span>
+        <span class="score"></span>
+      </div>
+      <div id="controls" class="noselect">
+        <button id="deal">deal</button>
+        <button id="hit">hit</button>
+        <button id="stand">stand</button>
+        <button id="quit">quit</button>
       </div>
     </div>
   </div>

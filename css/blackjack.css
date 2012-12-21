@@ -55,9 +55,8 @@ For pixels (px) Declare this percent (%)
  *  ffffff  fff      LIGHT
  *  000000  000      DARK
  *
- *  a90000           RED
  *  0096C4           Twitter Blue
- *
+ *  336600  360      Background Green
  *
  * ----------------------------------------------------------------------- */
 
@@ -101,7 +100,7 @@ For pixels (px) Declare this percent (%)
   position: absolute;
   width: 100%;
   top: 49px;
-  bottom: 29px;
+  bottom: 38px;
   height: auto;
   background-color: #fff;
   border-top: 1px solid #999;
@@ -111,7 +110,8 @@ For pixels (px) Declare this percent (%)
 #footer {
   position: absolute;
   width: 100%;
-  height: 28px;
+  height: 37px;
+  top: auto;
   bottom: 0;
   background-color: #0096C4;
   border-top: 1px solid #fff;
@@ -169,18 +169,291 @@ For pixels (px) Declare this percent (%)
   height: 100%;
   /*opacity: 0;*/
   z-index: 100;
+  background-color: #360;
 }
 
 #limits {
   position: absolute;
-  top: 0;
+  top: 48px;
   right: auto;
-  bottom: 0;
-  left: 0; 
-  width: 128px;
-  height: 24px;
-  z-index: 1;       /* raise above map and chart layers */
+  bottom: 30%;
+  left: 12px; 
+  width: 96px;
 }
+
+.label {
+  float: left;
+  text-align: left;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: auto;
+  width: 50%;
+  height: 100%;
+}
+
+.value {
+  float: right;
+  text-align: right;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 50%;
+  height: 100%;
+}
+
+#shoe {
+  position: absolute;
+  text-align: right;
+  top: 48px;
+  left: 12px;
+  height: 135px;
+  width: 100px;
+  bottom: 0;
+  right: auto; 
+  z-index: 1;
+  color: white;
+  font-size: 138.5%;
+}
+#shoe img {
+  height: 100%;
+  width: 100%;
+}
+
+#controls {
+  position: absolute;
+  bottom: 0;
+  height: 48px;
+  line-height: 48px;
+  left: 0;
+  right: 0;
+  width: auto;
+  top: auto;
+  text-align: center;
+}
+
+#controls button {
+  border-radius: 5px;
+  line-height: 18px;
+  width: 120px;
+  background-color: #030;
+  border: 1px solid orange;
+  margin: 0 18px;
+  color: white;
+  font-size: 138.5%;
+  cursor: pointer;
+}
+#controls button[off=true] {
+  background-color: #360;
+}
+
+#pot {
+  position: absolute;
+  top: 35%;
+  right: 12px;
+  bottom: auto; 
+  left: auto; 
+  width: 96px;
+  height: auto;
+  text-align: center;
+}
+
+#pot .value {
+  color: white;
+  font-size: 182%;
+  text-align: center;
+  width: 100%;
+}
+
+#pot .name {
+  position: relative;
+  border-radius: 5px;
+  -moz-border-radius: 5px;
+  height: 36px;
+  width: 100%;
+  margin-bottom: 12px;
+  line-height: 36px;
+}
+
+#holdings {
+  position: absolute;
+  bottom: auto;
+  right: 12px;
+  top: 48px;
+  left: auto; 
+  width: 96px;
+  text-align: center;
+}
+
+#holdings .value {
+  color: white;
+  font-size: 182%;
+  text-align: center;
+  width: 100%;
+}
+
+#holdings .name {
+  position: relative;
+  border-radius: 5px;
+  -moz-border-radius: 5px;
+  height: 36px;
+  width: 100%;
+  margin-bottom: 12px;
+  line-height: 36px;
+}
+
+#dealer {
+  position: absolute;
+  top: 48px;
+  left: 128px;
+  right: 128px;
+  height: 50%;
+  border: 1px solid orange;
+  border-bottom: 0px;
+}
+
+#player {
+  position: absolute;
+  bottom: 48px;
+  left: 128px;
+  right: 128px;
+  height: 40%;
+  border: 1px solid orange;
+  border-top: 0px;
+}
+
+#dealer span {
+  text-align: center;
+}
+
+#player span {
+  text-align: center;
+}
+
+.name {
+  float: left;
+  height: 36px;
+  line-height: 36px;
+  width: 50%;
+  background-color: orange;
+  color: black;
+  font-size: 138.5%;
+}
+
+.score {
+  float: right;
+  height: 36px;
+  line-height: 36px;
+  width: 50%;
+  background-color: orange;
+  color: black;
+  font-size: 138.5%;
+}
+
+#bets {
+  position: absolute;
+  bottom: 48px;
+  height: 180px;
+  line-height: 48px;
+  left: auto;
+  right: 12px;
+  width: 100px;
+  top: auto;
+  text-align: center;
+}
+
+#bets button {
+  float: right;
+  -moz-border-radius: 5px;
+  border-radius: 5px;
+  line-height: 18px;
+  width: 100%;
+  background-color: #030;
+  border: 1px solid orange;
+  color: white;
+  font-size: 138.5%;
+  cursor: pointer;
+}
+
+#bets .name {
+  position: relative;
+  border-radius: 5px;
+  -moz-border-radius: 5px;
+  height: 36px;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+/* =======================================================================
+ * Card styles.
+ * ----------------------------------------------------------------------- */
+
+div.card {
+  position: absolute;
+  top: 30%;
+  left: 35%;
+  height: 135px;
+  width: 100px;
+  border-radius: 8px;
+  border: 1px solid gray;
+  background-color: white;
+  font-size: 138.5%;
+}
+div.card:nth-child(2) {
+  margin-top: -5px;
+  margin-left: 25px;
+}
+div.card:nth-child(3) {
+  margin-top: -10px;
+  margin-left: 50px;
+}
+div.card:nth-child(4) {
+  margin-top: -5px;
+  margin-left: 75px;
+}
+div.card:nth-child(5) {
+  margin-top: 0px;
+  margin-left: 100px;
+}
+div.card:nth-child(6) {
+  margin-top: -5px;
+  margin-left: 125px;
+}
+div.card:nth-child(7) {
+  margin-top: -10px;
+  margin-left: 150px;
+}
+div.card:nth-child(8) {
+  margin-top: -15px;
+  margin-left: 175px;
+}
+div.card:nth-child(9) {
+  margin-top: -10px;
+  margin-left: 200px;
+}
+
+div.card .label {
+  position: relative;
+  display: block;
+  top: 4px;
+  left: 4px;
+  right: auto;
+  bottom: auto;
+  width: 25px;
+  height: 25px;
+}
+div.card .symbol {
+  position: relative;
+  display: block;
+  top: 4px;
+  left: 3px;
+  right: auto;
+  bottom: auto;
+  width: 25px;
+  height: 25px;
+}
+
 
 /* =======================================================================
  * Footer styles.
@@ -194,8 +467,8 @@ For pixels (px) Declare this percent (%)
   left: 25px; 
   width: auto;
   height: 100%;
-  line-height: 24px;
-  font-size: 93%;
+  line-height: 35px;
+  font-size: 108%;
   overflow: hidden;
 }
 
