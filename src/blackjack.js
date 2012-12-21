@@ -1287,12 +1287,7 @@ B.Hand.prototype.show = function() {
 		}
 	});
 
-	if (!holes) {
-        return this;
-    }
-
-	// TODO: trigger rendering update.
-	return this;
+    return this;
 };
 
 
@@ -1658,8 +1653,6 @@ B.Game.prototype.blackjack = function(hand) {
             my.checkHands();
         }, 0);
     }
-
-	// TODO: trigger rendering update.
 };
 
 
@@ -1883,7 +1876,7 @@ B.Game.prototype.quit = function() {
     this.getPlayer().adjustHoldings(parseInt(pot, 10));
     d3.select('#holdings .value').text(this.getPlayer().getHoldings());
 
-	// TODO: clear all game state and redisplay the splash screen to support
+	// Clear all game state and redisplay the splash screen to support
 	// moving into test() mode or invoking a new game() sequence.
     this.renderDeal();
 
@@ -2293,28 +2286,6 @@ B.options = null;
 
 
 /**
- */
-B.handleGameClick = function() {
-
-	// TODO:	Fade out splash, fade in gameboard.
-
-	B.game = new B.Game(B.options);
-	B.game.start();
-};
-
-
-/**
- */
-B.handleTestClick = function() {
-
-	// TODO:	Fade out splash, fade in test console.
-
-	B.test = new B.Test(B.options);
-	B.test.start();
-};
-
-
-/**
  * Initializes the game and starts it.
  * @param {object} options Optional game configuration options.
  */
@@ -2328,30 +2299,10 @@ B.init = function(options) {
 	// Cache options for use across all Game/Test invocations.
 	B.options = options;
 
-	// TODO: hook splash screen Game button and Test button. Game button creates
-	// a new Game instance and starts it. Test button creates a new Test
-	// instance and starts it.
-	B.handleGameClick();
+	B.game = new B.Game(B.options);
+	B.game.start();
 };
 
-
-/**
- * Resets the outer application harness to a pre-click state.
- */
-B.reset = function() {
-
-	if (B.game) {
-		// TODO:	reverse the fade in/out for splash/game UI.
-		log();
-	} else {
-		// TODO:	reverse the fade in/out for splash/test UI.
-		log();
-	}
-
-	// Release references so GC can do it's thing.
-	B.game = null;
-	B.test = null;
-};
 
 //  --------------------------------------------------------------------------- 
 //	Export
