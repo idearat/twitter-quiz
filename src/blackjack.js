@@ -90,7 +90,8 @@ B.Printable = {
 			arr.push(card.print());
 		});
 
-		return arr.join();
+		// Use a space here. Commas make Card values/suits harder to read.
+		return arr.join(' ');
 	}
 };
 
@@ -196,13 +197,13 @@ B.Card = function(index, suit) {
 
 	// Validate index.
 	if (index < 1 || index > 13) {
-		throw new Error('Invalid card index: ' + index);
+		throw new Error('InvalidIndex: ' + index);
 	}
 	i = index;
 
 	// Validate suit.
 	if (suit < 1 || suit > 4) {
-		throw new Error('Invalid card suit: ' + suit);
+		throw new Error('InvalidSuit: ' + suit);
 	}
 	s = suit;
 
@@ -240,6 +241,11 @@ B.Card = function(index, suit) {
 		}
 	};
 };
+
+
+/**
+ */
+B.Card.HOLE_CARD = '\u2300';		// "not"
 
 
 /**
@@ -304,7 +310,7 @@ B.Card.prototype.getSymbol = function() {
  */
 B.Card.prototype.print = function() {
 	if (this.isHoleCard()) {
-		return '\u2300';
+		return B.Card.HOLE_CARD;
 	} else {
 		return this.getLabel() + this.getSymbol();
 	}
@@ -542,7 +548,7 @@ B.Shoe.prototype.fill = function() {
 	// For continuous shuffling we'd remove this check.
 	cards = this.getCards();
 	if (cards.length !== 0) {
-		throw new Error('Invalid operation. Cannot fill unless empty.');
+		throw new Error('InvalidOperation: Cannot fill unless empty.');
 	}
 
 	count = this.getSize();
@@ -550,6 +556,17 @@ B.Shoe.prototype.fill = function() {
 		this.addDeck(new B.Deck());
 	}
 
+	return this;
+};
+
+
+/**
+ * Resets the Shoe, emptying it and filling it with fresh deck(s).
+ * @return {B.Shoe} The receiver.
+ */
+B.Shoe.prototype.reset = function() {
+	this.getCards().length = 0;
+	this.fill();
 	return this;
 };
 
@@ -582,12 +599,12 @@ B.Player = function(g, h) {
 
 	// Validate game instance.
 	if (!g) {
-		throw new Error('Invalid Game');
+		throw new Error('InvalidGame');
 	}
 
 	// Validate holdings.
 	if (!h) {
-		throw new Error('Invalid Holdings');
+		throw new Error('InvalidHoldings');
 	}
 
 	/**
@@ -655,10 +672,11 @@ B.Player.prototype.increaseBet = function(hand, amount) {
 
 /*
  * NOTE: 
- * The Game interacts primarily with Hands and only indirectly with
- * Players. As a result the link between a Hand and a Player is maintained by the
- * Hand instance, not the Player instance, and most operations affecting a player
- * are driven from methods/event initially invoked on a specific Hand.
+ *
+ * The Game interacts primarily with Hands and only indirectly with the Player.
+ * The link between a Hand and a Player is maintained by the Hand instance, not
+ * the Player instance, and most operations affecting a Player are driven from
+ * methods/events invoked on a specific Hand.
  */
 
 
@@ -701,35 +719,41 @@ B.Hand = function(g, p) {
 	fsm = StateMachine.create({
 		initial: 'empty',
 		error: function(evt, from, to, args, code, msg) {
-			log('ERROR: Hand cannot transition from: ' + 
-				from + ' state to: ' + to + ' state');
+			var str = 'Hand cannot transition from: ' + 
+				from + ' state to: ' + to + ' state. ' + msg;
+			throw new Error('InvalidStateTransition: ' + str);
 		},
 		events: [
 			// Each hit changes the state to help us know what options are
-			// available. Note that you can't hit() on a triplet, the state
+			// available. Note that you can't hit() on doubled, the state
 			// we get from using "double".
 			{ name: 'hit', from: 'empty', to: 'single' },
 			{ name: 'hit', from: 'single', to: 'pair' },
-			{ name: 'hit', from: 'pair', to: 'active' },
+			{ name: 'hit', from: 'pair', to: 'hit' },
+			{ name: 'hit', from: 'hit', to: 'hit' },
+
+			{ name: 'blackjack', from: 
+				['pair', 'doubled', 'hit'], 
+				to: 'blackjack' },
 
 			// Many events are only legal when the Hand is in the initial
 			// pair state with two cards.
 			{ name: 'split', from: 'pair', to: 'single' },
-			{ name: 'double', from: 'pair', to: 'triplet' },
+			{ name: 'double', from: 'pair', to: 'doubled' },
 			{ name: 'surrender', from: 'pair', to: 'surrendered' },
 
-			// You can bust from active or doubled states.
-			{ name: 'bust', from: ['doubled', 'active'], to: 'busted' }
+			// You can bust from hit or doubled states.
+			{ name: 'bust', from: ['doubled', 'hit'], to: 'busted' }
 		]});
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
 		log('Hand transitioned from: ' + 
-			from + ' state to: ' + to + ' state');
+			from + ' state to: ' + to + ' state.');
 	};
 
 	if (DEBUG) {
-		log('Initialized Hand state');
+		log('Initialized Hand state.');
 	}
 
 
@@ -817,7 +841,7 @@ B.Hand.prototype.bust = function() {
 	var fsm;
 
 	fsm = this.getFSM();
-	this.getFSM().bust();
+	fsm.bust();
 
 	// Notify the Game. This is key so the Game is aware of state changes with
 	// the Hands. We could do this via pub/sub signaling as an alternative.
@@ -831,25 +855,23 @@ B.Hand.prototype.bust = function() {
  * added to the Hand.
  */
 B.Hand.prototype.double = function() {
-	var fsm;
+	var fsm,
+		cards,
+		game;
+
+	fsm = this.getFSM();
+	fsm.double();
 
 	// The player must have enough chips to support this operation or the
 	// increase fails.
 	this.increaseBet(this.getBet());
-
-	// Add a third card. Doing this will check the hand for bust().
-	this.hit();
-
-	// Hitting may have caused the hand to bust() in which case we're done.
-	// But if we can still transition to double then we must not have busted
-	// and can transition.
-	if (fsm.can('double')) {
-		// Update our state machine.
-		fsm.double();
 	
-		// Notify Game of any "terminal state" for a Hand.
-		this.getGame().double(this);
-	}
+	game = this.getGame();
+
+	cards.push(game.getShoe().deal());
+
+	// Notify Game of any "terminal state" for a Hand.
+	this.getGame().double(this);
 };
 
 
@@ -911,6 +933,28 @@ B.Hand.prototype.getScore = function() {
 
 
 /**
+ * Returns true if the Hand has at least one hole card, a Card whose value
+ * should not be shown or otherwise disclosed.
+ * @return {boolean} True if the Hand has a hole card.
+ */
+B.Hand.prototype.hasHoleCards = function() {
+	var cards,
+		i,
+		len;
+
+	cards = this.getCards();
+	len = cards.length;
+	for (i = 0; i < len; i++) {
+		if (cards[i].isHoleCard()) {
+			return true;
+		}
+	}
+
+	return false;
+};
+
+
+/**
  * Adds a card to the Hand, provided that the current state allows it.
  * @param {B.Card} card The new card to add to the Hand.
  * @return {B.Hand} The receiver.
@@ -919,12 +963,11 @@ B.Hand.prototype.hit = function(card) {
 	var fsm,
 		cards;
 
-	fsm = this.getFSM();
-	fsm.hit();
-
 	cards = this.getCards();
 	cards.push(card);
 
+	fsm = this.getFSM();
+	fsm.hit();
 
 	// With every new card we test and invoke the bust() event if the card
 	// has pushed us over our limit.
@@ -968,6 +1011,10 @@ B.Hand.prototype.isBlackjack = function() {
 	var cards,
 		bjack;
 
+	if (DEBUG) {
+		log('Checking for blackjack on Hand: ' + this.print());
+	}
+
 	cards = this.getCards();
 
 	// Two cards, second one can't be a hole card (don't prematurely expose
@@ -979,6 +1026,7 @@ B.Hand.prototype.isBlackjack = function() {
 	// Update our state to keep from doing "stoopid" things :).
 	if (bjack) {
 		this.getFSM().blackjack();
+		this.getGame().blackjack(this);
 	}
 
 	return bjack;
@@ -1010,6 +1058,21 @@ B.Hand.prototype.onpair = function() {
 };
 
 
+// Now highjack our mixin version and wrap it so we can augment it.
+B.Hand.prototype._print = B.Hand.prototype.print;
+
+/**
+ * Prints the Hand. Hands print their values/suits as well as their score, with
+ * the exception that hole cards print as a "not" or "null" symbol and the score
+ * is likewise disguised to keep from exposing the true value of the hand.
+ * @return {string} The print string.
+ */
+B.Hand.prototype.print = function() {
+	return this._print() + ' => ' + 
+		(this.hasHoleCards() ? B.Card.HOLE_CARD : this.getScore());
+};
+
+
 /**	
  * The Hand was a tie. No change in holdings, but the current bets are
  * returned to the player's holdings.
@@ -1028,6 +1091,7 @@ B.Hand.prototype.push = function() {
 /**
  * Displays the hand's hole cards, if any. Upon show(), if the hand only has two
  * cards, it is checked for a Blackjack status.
+ * @return {B.Hand} The receiver.
  */
 B.Hand.prototype.show = function() {
 	var cards, 
@@ -1049,6 +1113,9 @@ B.Hand.prototype.show = function() {
 	}
 
 	// TODO: trigger rendering update.
+
+
+	return this;
 };
 
 
@@ -1121,8 +1188,42 @@ B.Hand.prototype.win = function() {
  * @constructor
  */
 B.Game = function(opts) {
-	var fsm,
-		options;
+	var dealer,
+		decks,
+		fsm,
+		hands,
+		holdings,
+		maxBet,
+		minBet,
+		player,
+		options,
+		shoe;
+
+	/**
+	 * An optional object whose key/value pairs provide configuration data.
+	 * @type {object}
+	 */
+	options = opts || {};	// Simplify lookup/defaulting syntax below.
+
+	// TODO: replace anything we store as a single slot that could make sense as
+	// an option within our options object. We can migrate those getters back
+	// out as this.getOptions()[decks, min, max, ...]
+
+
+	/**
+	 * The dealer's Hand. We hold this Hand separate for easy comparison with
+	 * player Hands which are kept in the hands[] array.
+	 * @type {B.Hand}
+	 */
+	dealer = null;
+
+
+	/**
+	 * The number of decks in the Shoe.
+	 * @type {number}
+	 */
+	decks = options.decks || B.Game.DEFAULT.DECK_COUNT;
+
 
 	/**
 	 * The state machine which embodies the game state and transitions.
@@ -1140,8 +1241,9 @@ B.Game = function(opts) {
 	fsm = StateMachine.create({
 		initial: 'pregame',
 		error: function(evt, from, to, args, code, msg) {
-			log('ERROR: Game cannot transition from: ' + 
-				from + ' state to: ' + to + ' state');
+			var str = 'Game cannot transition from: ' + 
+				from + ' state to: ' + to + ' state. ' + msg;
+			throw new Error('InvalidStateTransition: ' + str);
 		},
 		events: [
 			{ name: 'deal', from: ['pregame', 'postgame'], to: 'dealing' },
@@ -1155,24 +1257,69 @@ B.Game = function(opts) {
 
 			{ name: 'payout', from: 'scoring', to: 'done' },
 
-			{ name: 'quit', from: 'postgame', to: 'done' }
+			{ name: 'quit', from: '*', to: 'done' }
 		]});
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
 		log('Game transitioned from: ' + 
-			from + ' state to: ' + to + ' state');
+			from + ' state to: ' + to + ' state.');
 	};
 
 	if (DEBUG) {
-		log('Initialized Game state');
+		log('Initialized Game state.');
 	}
 
 	/**
-	 * An optional object whose key/value pairs provide configuration data.
-	 * @type {object}
+	 * A list of all player Hands currently active.  This is an array to support a
+	 * player having multiple Hands due to splitting.
+	 * @type {Array.<B.Hand>}
 	 */
-	options = opts;
+	hands = [];
+
+
+	/**
+	 * The default starting holdings for the player.
+	 * @type {number}
+	 */
+	holdings = options.chips || B.Game.DEFAULT.HOLDINGS;
+
+
+	/**
+	 * The maximum bet for this game instance.
+	 * @type {number}
+	 */
+	maxBet = options.max || B.Game.DEFAULT.MAXIMUM_BET;
+
+
+	/**
+	 * The minimum bet for this game instance.
+	 * @type {number}
+	 */
+	minBet = options.min || B.Game.DEFAULT.MINIMUM_BET;
+
+
+	/**
+	 * The player for the game.
+	 * @type {B.Player}
+	 */
+	player = new B.Player(this, holdings);
+
+
+	/**
+	 * The Shoe used to deal cards for the game.
+	 * @type {B.Shoe}
+	 */
+	shoe = new B.Shoe(decks);
+
+
+	/**
+	 * Returns the dealer's Hand.
+	 * @return {B.Hand} The dealer's Hand.
+	 */
+	this.getDealer = function() {
+		return dealer;
+	};
 
 
 	/**
@@ -1186,16 +1333,73 @@ B.Game = function(opts) {
 
 
 	/**
+	 * Returns the Player's Hands.
+	 * @return {Array.<B.Hand>} The player's Hands.
+	 */
+	this.getHands = function() {
+		return hands;
+	};
+
+
+	/**
+	 * Returns the maximum value a player can bet for this game.
+	 * @return {number} The maximum bet.
+	 */
+	this.getMaximumBet = function() {
+		return maxBet;
+	};
+
+
+	/**
+	 * Returns the minimum value a player can bet for this game.
+	 * @return {number} The minimum bet.
+	 */
+	this.getMinimumBet = function() {
+		return minBet;
+	};
+
+
+	/**
 	 * Returns any startup configuration options for the game. Note that the
 	 * options are mutable so they can be modified by callers.
 	 * @return {object} Startup options.
 	 */
 	this.getOptions = function() {
-		return opts;
+		return options;
 	};
 
-	// Initialize using any options provided.
-	this.init(opts);
+
+	/**
+	 * Returns the Player.
+	 * @return {B.Player} The player.
+	 */
+	this.getPlayer = function() {
+		return player;
+	};
+
+
+	/**
+	 * Returns the shoe being used to deal cards.
+	 * @return {B.Shoe} The game's shoe.
+	 */
+	this.getShoe = function() {
+		return shoe;
+	};
+
+
+	/**
+	 * Defines the Hand played by the Dealer.
+	 * @param {B.Hand} hand The new Hand for the dealer.
+	 * @return {B.Hand} The new hand.
+	 */
+	this._setDealer = function(hand) {
+		dealer = hand;
+		return dealer;
+	};
+
+
+	// Connect the various FSM transition hooks to game methods.
+	// TODO:
 
 	return this;
 };
@@ -1215,130 +1419,10 @@ B.Game.DEFAULT = {
 
 
 /**
- * The dealer's Hand. We hold this Hand separate for easy comparison with player
- * Hands which are kept in the hands[] array.
- * @type {B.Hand}
- */
-B.Game.prototype.dealer = null;
-
-
-/**
- * The number of decks in the Game's Shoe. Default is DEFAULT.DECK_COUNT [1].
- * @type {number}
- */
-B.Game.prototype.decks = B.Game.DEFAULT.DECK_COUNT;
-
-
-/**
- * The state machine which controls overall game flow. Note that Hand instance
- * have their own state machine tracking the logic specific to playing a Hand.
- * @type {StateMachine}
- */
-B.Game.prototype.fsm = null;
-
-
-/**
- * A list of all player Hands currently active.  This is an array to support a
- * player having multiple Hands due to splitting.
- * @type {Array.<B.Hand>}
- */
-B.Game.prototype.hands = null;
-
-
-/**
- * The default starting holdings for the player.
- * @type {number}
- */
-B.Game.prototype.holdings = B.Game.DEFAULT.HOLDINGS;
-
-
-/**
- * The maximum bet for this game instance.
- * @type {number}
- */
-B.Game.prototype.maxBet = B.Game.DEFAULT.MAXIMUM_BET;
-
-
-/**
- * The minimum bet for this game instance.
- * @type {number}
- */
-B.Game.prototype.minBet = B.Game.DEFAULT.MINIMUM_BET;
-
-
-/**
- * The player for the game.
- * @type {B.Player}
- */
-B.Game.prototype.player = null;
-
-
-/**
- * The Shoe used to deal cards for the game.
- * @type {B.Shoe}
- */
-B.Game.prototype.shoe = null;
-
-
-/**
- * Returns the maximum value a player can bet for this game.
- * @return {number} The maximum bet.
- */
-B.Game.prototype.getMaximumBet = function() {
-	return this.maxBet;
-};
-
-
-/**
- * Returns the minimum value a player can bet for this game.
- * @return {number} The minimum bet.
- */
-B.Game.prototype.getMinimumBet = function() {
-	return this.minBet;
-};
-
-
-/**
- * Returns the shoe being used to deal cards.
- * @return {B.Shoe} The game's shoe.
- */
-B.Game.prototype.getShoe = function() {
-	return this.shoe;
-};
-
-
-/**
- * Initializes the game instance.
- * @param {object} options Optional game options.
- */
-B.Game.prototype.init = function(options) {
-	var i,
-		count;
-
-	if (options) {
-		this.decks = options.decks || this.decks;
-		this.maxBet = options.max || this.maxBet;
-		this.minBet = options.min || this.minBet;
-		this.holdings = options.chips || this.holdings;
-	}
-
-	this.shoe = new B.Shoe(this.decks);
-	this.player = new B.Player(this, this.holdings);
-	this.hands = [];
-
-	// TODO:
-	// Connect the various FSM transition hooks to game methods.
-
-	return this;
-};
-
-
-/**
  * Invoked when a Hand has a blackjack (Ace and ten-value).
  */
 B.Game.prototype.blackjack = function(hand) {
-	if (hand === this.getHand()) {
-	}
+	log('Blackjack!: ' + hand.print());
 };
 
 
@@ -1349,8 +1433,7 @@ B.Game.prototype.blackjack = function(hand) {
  * the option to deal a new set of Hands is provided.
  */
 B.Game.prototype.bust = function(hand) {
-	if (hand === this.getHand()) {
-	}
+	log('Hand busted: ' + hand.print());
 };
 
 
@@ -1362,40 +1445,50 @@ B.Game.prototype.bust = function(hand) {
  */
 B.Game.prototype.deal = function() {
 	var fsm,
-		shoe,
-		my;
+		dealer,
+		hands,
+		shoe;
 
 	fsm = this.getFSM();
 	fsm.deal();
 
-	// Capture this for lazy 'bind' via closure.
-	my = this;
+	// Note we keep using the current shoe, letting it refill on its own when it
+	// empties.	
 	shoe = this.getShoe();
 
-	// Note that the dealer's Hand has no Player assigned. For simplification
-	// the "Game" plays the Dealer's Hand.
-	this.dealer = new B.Hand();
+	// Clear and/or replace the hands for player and dealer.
+	hands = this.getHands();
+	hands.length = 0;
+	hands.push(new B.Hand(this, this.getPlayer()));
+	dealer = this._setDealer(new B.Hand(this));
 
-	// Create an initial Hand for the player.
-	this.hands.length = 0;
-	my.hands.push(new B.Hand(this.player));
+	// Now that we have the Hands built we need to deal Cards in the proper
+	// order. One card to each player hand, then to dealer, then one more to
+	// each player, and a hole card to the dealer.
 
-	// Now that we have the Hands built we need to deal them some cards in the
-	// proper order.
-	this.hands.map(function(hand) {
+	hands.map(function(hand) {
 		hand.hit(shoe.deal());
 	});
-	this.dealer.hit(shoe.deal());
-
-	this.hands.map(function(hand) {
+	dealer.hit(shoe.deal());
+	hands.map(function(hand) {
 		hand.hit(shoe.deal());
 	});
-
-	// NOTE that in European / Australian rules we might not deal this second
-	// card. Even when we do, we request this card as a hole card.
-	this.dealer.hit(shoe.deal(true));
+	dealer.hit(shoe.deal(true));	// Hole card.
 
 	this.renderHands(this.play.bind(this));
+};
+
+
+/**
+ * Throws away the current Hands and prepares for a new deal().
+ * @return {B.Game} The receiver.
+ */
+B.Game.prototype.discard = function() {
+
+	this.getHands().length = 0;
+	this._setDealer = null;
+
+	return this;
 };
 
 
