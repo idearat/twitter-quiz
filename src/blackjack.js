@@ -769,12 +769,14 @@ B.Hand = function(g, p) {
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Hand event: ' + evt + ' from: ' +
-			from + ' to: ' + to + '.');
+        if (DEBUG) {
+            log('Hand event: ' + evt + ' from: ' +
+                from + ' to: ' + to + '.');
+        }
 	};
 
 	if (DEBUG) {
-		log('Initialized Hand state.');
+		log('Initialized ' + (p ? 'player' : 'dealer') + ' hand state.');
 	}
 
 
@@ -1046,11 +1048,14 @@ B.Hand.prototype.hasHoleCards = function() {
  * @param {B.Card} card The new card to add to the Hand.
  */
 B.Hand.prototype.hit = function(card) {
-	var fsm,
+	var c,
+        fsm,
 		cards;
 
+    c = card || this.getGame().getShoe().deal();
+
 	cards = this.getCards();
-	cards.push(card);
+	cards.push(c);
 
 	fsm = this.getFSM();
 	fsm.hit();
@@ -1102,14 +1107,16 @@ B.Hand.prototype.isBlackjack = function() {
         cards,
 		bjack;
 
-	if (DEBUG) {
-		log('Checking for blackjack on Hand: ' + this.print());
-	}
-
     fsm = this.getFSM();
     if (fsm.current === 'blackjack') {
+        // We check in multiple pathways. Do work once.
         return true;
     }
+
+	if (DEBUG) {
+		log('Checking ' + (this.getPlayer() ? 'player ' : 'dealer ') + 
+            this.print() + ' for blackjack.');
+	}
 
 	cards = this.getCards();
 
@@ -1172,11 +1179,9 @@ B.Hand.prototype.pay = function(odds) {
 		winnings = bet + (bet * odds);
 		player.adjustHoldings(winnings);
 
-		if (DEBUG) {
-			// Note the use of _print here to leave off score.
-			log('Hand ' + this._print() + ' paying ' + odds +
-				' to 1 odds, or ' + winnings + '.');
-		}
+		// Note the use of _print here to leave off score.
+		log('Hand ' + this._print() + ' paying ' + odds +
+			' to 1 odds, or ' + winnings + '.');
 	}
 };
 
@@ -1211,11 +1216,9 @@ B.Hand.prototype.push = function() {
 		bet = this.getBet();
 		player.adjustHoldings(bet);
 
-		if (DEBUG) {
-			// Note the use of _print here to leave off score.
-			log('Hand ' + this._print() + ' pushed. Returning ' +
-				' bet of ' + bet);
-		}
+		// Note the use of _print here to leave off score.
+		log('Hand ' + this._print() + ' pushed. Returning ' +
+			'bet of ' + bet + '.');
 	}
 };
 
@@ -1239,11 +1242,11 @@ B.Hand.prototype.show = function() {
 		}
 	});
 
-	if (holes) {
-		// TODO: trigger rendering update.
-		return this;
-	}
+	if (!holes) {
+        return this;
+    }
 
+	// TODO: trigger rendering update.
 	return this;
 };
 
@@ -1344,11 +1347,6 @@ B.Game = function(opts) {
 	options = opts || {};	// Simplify lookup/defaulting syntax below.
 
 
-	// TODO: replace anything we store as a single slot that could make sense as
-	// an option within our options object. We can migrate those getters back
-	// out as this.getOptions()[decks, min, max, ...]
-
-
 	/**
 	 * The dealer's Hand. We hold this Hand separate for easy comparison with
 	 * player Hands which are kept in the hands[] array.
@@ -1387,30 +1385,37 @@ B.Game = function(opts) {
 		events: [
 			{ name: 'deal', from: ['pregame', 'postgame'], to: 'dealing' },
 
-			// If the player is low on chips before the deal no hands are dealt
-			// and the state moves to buying.
+            // Normal flow is players, then dealer.
+			{ name: 'player', from: 'dealing', to: 'player' },
+			{ name: 'dealer', from: 'player', to: 'dealer' },
+
+			// If the player is low on chips before the deal no hands are
+			// dealt and the state moves to 'buying'.
 			{ name: 'buyin', from: 'dealing', to: 'buying' },
 
 			// Blackjack for dealer will mean straight to scoring.
 			{ name: 'blackjack', from: 'dealing', to: 'scoring' },
 
-			{ name: 'player', from: 'dealing', to: 'player' },
-			{ name: 'insure', from: 'player', to: 'insure' },
-			{ name: 'dealer', from: ['player', 'insure'], to: 'dealer' },
-
+            // Dealer bust takes us straight to scoring.
 			{ name: 'bust', from: 'dealer', to: 'scoring'},
-			{ name: 'score', from:
-                ['dealing', 'dealer'], to: 'scoring' },
 
-			{ name: 'done', from: ['dealer', 'scoring'], to: 'postgame' },
+            // Scoring can happen directly from dealing if either the player or
+            // the dealer has a blackjack.
+			{ name: 'score', from: ['dealing', 'dealer'], to: 'scoring' },
 
+            // We can move properly to 'done' once we've scored the game.
+			{ name: 'done', from: 'scoring', to: 'postgame' },
+
+            // We can quit from anywhere.
 			{ name: 'quit', from: '*', to: 'exited' }
 		]});
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Game event: ' + evt + ' from: ' +
-			from + ' to: ' + to + '.');
+        if (DEBUG) {
+            log('Game event: ' + evt + ' from: ' +
+                from + ' to: ' + to + '.');
+        }
 	};
 
 	if (DEBUG) {
@@ -1580,7 +1585,7 @@ B.Game.prototype.blackjack = function(hand) {
 	hand.show();
 
 	if (DEBUG) {
-		prefix = (hand === this.getDealer()) ? 'Dealer' : 'Hand';
+		prefix = (hand === this.getDealer()) ? 'Dealer' : 'Player';
 		log(prefix + ' Blackjack!: ' + hand.print());
 	}
 
@@ -1602,7 +1607,7 @@ B.Game.prototype.blackjack = function(hand) {
         }, 0);
     }
 
-	// TODO: rendering
+	// TODO: trigger rendering update.
 };
 
 
@@ -1646,7 +1651,7 @@ B.Game.prototype.checkHands = function() {
 	if (done) {
         // No remaining playable hands. 
         if (fsm.can('dealer')) {
-            this.dealer();
+            fsm.dealer();
         } else if (fsm.can('score')) {
             this.score();
         }
@@ -1729,6 +1734,30 @@ B.Game.prototype.double = function(hand) {
 
 
 /**
+ * Returns a handle to the next playable hand in the game. This is a useful way
+ * to interact with the hands in order, ignoring those which are complete.
+ * @return {B.Hand} The next playable hand.
+ */
+B.Game.prototype.getNextHand = function() {
+    var hands,
+        i,
+        len,
+        hand;
+
+    hands = this.getHands();
+    len = hands.length;
+    for (i = 0; i < len; i++) {
+        hand = hands[i];
+        if (hand.isPlayable()) {
+            return hand;
+        }
+    }
+
+    return;
+};
+
+
+/**
  * Responds to state changes into the dealer state. Once we enter this state we
  * play out the dealer's hand according to the 'hit rules' and then score the
  * various Player hands.
@@ -1742,7 +1771,7 @@ B.Game.prototype.onafterdealer = function() {
 
 	dealer = this.getDealer();
 	dealer.show();
-	// TODO: render after show? 
+	// TODO: trigger rendering update.
 
 
 	// See if we have any scorable hands. If they all busted or surrendered do
@@ -1774,10 +1803,9 @@ B.Game.prototype.onafterdealer = function() {
 
 
 /**
- *
+ * Processes the final done state transition.
  */
 B.Game.prototype.onafterdone = function() {
-	// TODO
 	log('Game over.');
 };
 
@@ -1847,28 +1875,31 @@ B.Game.prototype.score = function() {
 		busted,
 		bjack;
 
-	if (DEBUG) {
-		log('Scoring hands');
-	}
-
 	fsm = this.getFSM();
     if (fsm.can('score')) {
 	    fsm.score();
     }
 
+	log('Scoring hands.');
+
 	dealer = this.getDealer();
+    dealer.show();
 	house = dealer.getScore();
 	busted = house > 21;
 	bjack = dealer.isBlackjack();
+
+    log('Dealer has: ' + dealer.print());
 
 	hands = this.getHands();
 	hands.map(function(hand) {
 		var score;
 
+        log('Player has: ' + hand.print());
+
 		if (!hand.isScoreable()) {
 			return;
 		}
-
+    
 		if (hand.isBlackjack()) {
 			if (bjack) {
 				hand.push();
@@ -1953,6 +1984,8 @@ B.Game.prototype.stand = function(hand) {
  * Start a new game, triggering initial rendering and dealing to start a Hand.
  */
 B.Game.prototype.start = function() {
+	log('Game on.');
+
 	// Render the game table baseline, and deal when that's completed.
 	this.renderTable(this.deal.bind(this));
 };
