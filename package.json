@@ -4,7 +4,8 @@
   "dependencies": {
     "connect" : "1",
     "d3" : "2",
-    "mocha": "0"
+    "mocha": "0",
+	"uglify-js": "0"
   },
   "engines" : {
       "node" : "0.6"

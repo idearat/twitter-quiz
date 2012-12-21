@@ -135,12 +135,12 @@ B.Shuffler = {
 			start,
 			end;
 
-		// Dependency here on the consumer to dirty shuffled as needed.
+		// Dependency created on the consumer to dirty shuffled as needed.
 		if (this.shuffled) {
 			return this;
 		}
 
-		// Dependency here on the consumer to implement getCards.
+		// Dependency created here on the consumer to implement getCards.
 		cards = this.getCards();
 		m = cards.length;
 
@@ -148,6 +148,7 @@ B.Shuffler = {
 			start = (new Date()).getTime();
 		}
 
+		// Shuffle in place.
 		while (m) {
 			i = Math.floor(Math.random() * m--);
 			t = cards[m];
@@ -156,7 +157,7 @@ B.Shuffler = {
 		}
 
 		this.shuffled = true;
-		
+
 		if (DEBUG) {
 			end = (new Date()).getTime();
 			log('Shuffled fresh shoe of ' + cards.length + ' cards in ' +
@@ -186,26 +187,39 @@ B.Shuffler = {
 /**
  * Constructs a new Card instance and returns it. Normally Card instances are
  * not created directly but are produced from within the context of a Deck.
- * @param {number} index The card index from 1 to 13 (Ace to King).
- * @param {number} suit The card suit from 1 to 4 (H, C, D, S).
+ * @param {number} i The card index from 1 to 13 (Ace to King).
+ * @param {number} s The card suit from 1 to 4 (H, C, D, S).
  * @return {B.Card} A new card instance.
  * @constructor
  */
-B.Card = function(index, suit) {
-	var i,
-		s;
+B.Card = function(i, s) {
+	var index,
+		suit;
 
 	// Validate index.
-	if (index < 1 || index > 13) {
-		throw new Error('InvalidIndex: ' + index);
+	if (i < 1 || i > 13) {
+		throw new Error('InvalidIndex: ' + i);
 	}
-	i = index;
 
 	// Validate suit.
-	if (suit < 1 || suit > 4) {
-		throw new Error('InvalidSuit: ' + suit);
+	if (s < 1 || s > 4) {
+		throw new Error('InvalidSuit: ' + s);
 	}
-	s = suit;
+
+
+	/**
+	 * The index of the card from 1 to 13. This index is used to find the card's
+	 * label and value.
+	 */
+	index = i;
+
+
+	/**
+	 * The index of the suit from 1 to 4. This index is used to find the card's
+	 * suit name and symbol.
+	 * @type {number}
+	 */
+	suit = s;
 
 
 	/**
@@ -213,7 +227,7 @@ B.Card = function(index, suit) {
 	 * @return {number} The index from 1 to 13.
 	 */
 	this.getIndex = function() {
-		return i;
+		return index;
 	};
 
 
@@ -222,30 +236,19 @@ B.Card = function(index, suit) {
 	 * @return {number} The suit index.
 	 */
 	this.getSuit = function() {
-		return s;
+		return suit;
 	};
 
-
-	/**
-	 * Return the value of the card. Note that Aces will always return 11 while
-	 * face cards (J, Q, K) all return 10. During scoring of Hand instances the
-	 * Ace values are adjusted to 'soft' (1) values as needed.
-	 */
-	this.getValue = function() {
-		if (i === 1) {
-			return 11;
-		} else if (i > 10) {
-			return 10;
-		} else {
-			return i;
-		}
-	};
+	return this;
 };
 
 
 /**
+ * Constant used for hole card display and score display when a hole card is
+ * present in a Hand.
+ * @type {string}
  */
-B.Card.HOLE_CARD = '\u2300';		// "not"
+B.Card.HOLE_CARD = '\u2300';		// 'not' symbol 
 
 
 /**
@@ -258,8 +261,9 @@ B.Card.LABELS = [null,	// Don't use 0 index.
 
 
 /**
- * The names and Unicode symbols for the various suits in "new deck order",
- * Hearts, Clubs, Diamonds, Spades (aka suit index).
+ * The names and Unicode symbols for the various suits in 'new deck order',
+ * Hearts, Clubs, Diamonds, Spades (aka suit index). For text output we use the
+ * black symbols for Spades and Clubs and white symbols for Hearts and Diamonds.
  * @type {Array.<object>}
  */
 B.Card.SUITS = [null,	// Don't use 0 index.
@@ -305,14 +309,22 @@ B.Card.prototype.getSymbol = function() {
 
 
 /**
- * Prints the card's label/symbol pair to the console.
- * @return {B.Card} The receiver.
+ * Return the value of the card. Note that Aces will always return 11 while
+ * face cards (J, Q, K) all return 10. During scoring of Hand instances the
+ * Ace values are adjusted to 'soft' (1) values as needed.
+ * @return {number} The numerical value of the card from 2 to 11.
  */
-B.Card.prototype.print = function() {
-	if (this.isHoleCard()) {
-		return B.Card.HOLE_CARD;
+B.Card.prototype.getValue = function() {
+	var i;
+
+	i = this.getIndex();
+
+	if (i === 1) {
+		return 11;
+	} else if (i > 10) {
+		return 10;
 	} else {
-		return this.getLabel() + this.getSymbol();
+		return i;
 	}
 };
 
@@ -328,6 +340,19 @@ B.Card.prototype.isHoleCard = function(flag) {
 	}
 
 	return this.holeCard;
+};
+
+
+/**
+ * Prints the card's label/symbol pair to the console.
+ * @return {B.Card} The receiver.
+ */
+B.Card.prototype.print = function() {
+	if (this.isHoleCard()) {
+		return B.Card.HOLE_CARD;
+	} else {
+		return this.getLabel() + this.getSymbol();
+	}
 };
 
 
@@ -408,7 +433,7 @@ $.extend(B.Deck.prototype, B.Shuffler);
 
 
 /**
- * Constructs a new Shoe instance and returns it. A "shoe" is the container for
+ * Constructs a new Shoe instance and returns it. A 'shoe' is the container for
  * one or more decks of cards which are shuffled and dealt for the game.
  * @param {number} size The number of decks in the shoe. The default is
  *     B.Shoe.DEFAULT_SIZE.
@@ -478,7 +503,7 @@ B.Shoe.DEFAULT_SIZE = 1;
 
 /**
  * Adds a deck to the shoe. This operation does not instantly result in a
- * shuffle. The shoe will only shuffle if it is "unshuffled" and is asked to
+ * shuffle. The shoe will only shuffle if it is unshuffled and is asked to
  * deal a card.
  * @param {B.Deck} deck A deck of cards.
  * @return {B.Shoe} The receiver.
@@ -521,7 +546,7 @@ B.Shoe.prototype.deal = function(holeCard) {
 	// If we're out of cards we have to fill and vend from the fresh list.
 	if (!card) {
 		this.fill();
-		return this.deal();
+		return this.deal(holeCard);		// Pass along holeCard state flag.
 	}
 
 	// Update state of card if this is supposed to be a hole card (face down).
@@ -545,7 +570,8 @@ B.Shoe.prototype.fill = function() {
 		count,
 		cards;
 
-	// For continuous shuffling we'd remove this check.
+	// For continuous shuffling we'd remove this check and perhaps add cards
+	// from an array of passed in discards.
 	cards = this.getCards();
 	if (cards.length !== 0) {
 		throw new Error('InvalidOperation: Cannot fill unless empty.');
@@ -560,27 +586,16 @@ B.Shoe.prototype.fill = function() {
 };
 
 
-/**
- * Resets the Shoe, emptying it and filling it with fresh deck(s).
- * @return {B.Shoe} The receiver.
- */
-B.Shoe.prototype.reset = function() {
-	this.getCards().length = 0;
-	this.fill();
-	return this;
-};
-
-
 //  --------------------------------------------------------------------------- 
 //  Players / Hands
 //  --------------------------------------------------------------------------- 
 
 /*
  * NOTE: Player instances associate a set of holdings with a set of Hands. The
- * player manages holdings while Hands escrow their bets. If a Hand wins, pushes,
- * pays insurance, or is surrendered, the payout (usually bet * odds) is added to
- * the player's holdings. If a Hand busts or loses the escrowed amount of the
- * bet is simply discarded.
+ * player manages holdings while Hands escrow bets. If a Hand wins, pushes,
+ * pays insurance, or is surrendered, the payout is added to the player's
+ * holdings. If a Hand busts or loses the escrowed amount of the bet is simply
+ * discarded along with the Hand (we don't track House winnings).
  */
 
 
@@ -607,6 +622,7 @@ B.Player = function(g, h) {
 		throw new Error('InvalidHoldings');
 	}
 
+
 	/**
 	 * The game this player is a part of.
 	 * @type {B.Game}
@@ -619,6 +635,15 @@ B.Player = function(g, h) {
 	 * @type {number}
 	 */
 	holdings = h;
+
+
+	/**
+	 * Adjusts the receiver's holdings up or down by the amount provided.
+	 * @param {number} amount The amount to adjust holdings by.
+	 */
+	this.adjustHoldings = function(amount) {
+		holdings = this.getHoldings() + amount;
+	};
 
 
 	/**
@@ -638,34 +663,8 @@ B.Player = function(g, h) {
 		return holdings;
 	};
 
-
-	/**
-	 * Sets the holdings value to a new value.
-	 * @param {number} value The new value for holdings.
-	 */
-	this._setHoldings = function(value) {
-		holdings = value;
-	}
-
 	return this;
 };
-
-
-/**
- * Adjustes the receiver's holdings by the amount provided. This method is
- * typically invoked when a Hand owned by the receiver requests a minimum bet
- * amount or the bet amount on a Hand is increased.
- * @param {number} amount The amount to adjust holdings by.
- */
-B.Player.prototype.increaseBet = function(hand, amount) {
-
-	// TODO:
-
-	this._setHoldings(this.getHoldings() += amount);
-};
-
-
-// TODO:	not enough money to play? exit or buy chips...
 
 
 //  --------------------------------------------------------------------------- 
@@ -686,7 +685,7 @@ B.Player.prototype.increaseBet = function(hand, amount) {
  * managing the player's chips. The Game instance provides each Hand with an
  * object to notify when the state of the Hand changes in lieu of pub/sub.
  * @param {B.Game} g The Game this Hand of cards is a part of.
- * @param {B.Player} p The Player of this particular Hand of cards.
+ * @param {B.Player} p The Player of this particular Hand of cards. Optional.
  * @return {B.Hand} A new Hand instance.
  * @constructor
  */
@@ -695,14 +694,20 @@ B.Hand = function(g, p) {
 		cards,
 		fsm,
 		game,
-		player;
+		player,
+		playerOnly;
 
+
+	// Validate game instance.
+	if (!g) {
+		throw new Error('InvalidGame');
+	}
 
 	/**
      * The current bet amount.
      * @type {number}
      */
-	bet = null;
+	bet = 0;
 
 
 	/**
@@ -719,22 +724,26 @@ B.Hand = function(g, p) {
 	fsm = StateMachine.create({
 		initial: 'empty',
 		error: function(evt, from, to, args, code, msg) {
-			var str = 'Hand cannot transition from: ' + 
+			var str = 'Hand cannot transition from: ' +
 				from + ' state to: ' + to + ' state. ' + msg;
 			throw new Error('InvalidStateTransition: ' + str);
 		},
 		events: [
 			// Each hit changes the state to help us know what options are
 			// available. Note that you can't hit() on doubled, the state
-			// we get from using "double".
+			// we get from using 'double'.
 			{ name: 'hit', from: 'empty', to: 'single' },
 			{ name: 'hit', from: 'single', to: 'pair' },
 			{ name: 'hit', from: 'pair', to: 'hit' },
 			{ name: 'hit', from: 'hit', to: 'hit' },
 
-			{ name: 'blackjack', from: 
-				['pair', 'doubled', 'hit'], 
-				to: 'blackjack' },
+			// Stand from opening pair or after a hit. Doubled is already
+			// standing as is 'blackjack'. Surrendered and busted are failure
+			// states, not possible success states.
+			{ name: 'stand', from: ['pair', 'hit'], to: 'standing' },
+
+			// True blackjack only happens with a pair.
+			{ name: 'blackjack', from: 'pair', to: 'blackjack' },
 
 			// Many events are only legal when the Hand is in the initial
 			// pair state with two cards.
@@ -746,9 +755,21 @@ B.Hand = function(g, p) {
 			{ name: 'bust', from: ['doubled', 'hit'], to: 'busted' }
 		]});
 
+	// Set up 'return false' handlers for states you can't get to for Dealer
+	// Hands.
+	playerOnly = function() {
+		return player !== null && player !== undefined;
+	};
+	fsm.onbeforedouble = playerOnly;
+	fsm.onbeforesplit = playerOnly;
+	fsm.onbeforesurrender = playerOnly;
+	this.canDouble = playerOnly;
+	// NOTE this.canSplit is implemented with more detailed logic.
+	this.canSurrender = playerOnly;
+
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Hand transitioned from: ' + 
+		log('Hand transitioned from: ' +
 			from + ' state to: ' + to + ' state.');
 	};
 
@@ -820,10 +841,23 @@ B.Hand = function(g, p) {
 	};
 
 
+	/**
+	 * Sets the bet amount for the Hand.
+	 * @param {number} amount The value of the bet.
+	 * @private
+	 */
+	this._setBet = function(amount) {
+		bet = amount;
+	};
+
 	// Connect the various FSM transition hooks to Hand methods.
 	fsm.onpair = this.onpair.bind(this);
-	// TODO:
 
+	// If there's a player initialize the bet on the Hand to the minimum bet
+	// amount. If the Player can't cover the bet an exception is thrown.
+	if (player) {
+		this.increaseBet(this.getMinimumBet());
+	}
 
 	return this;
 };
@@ -834,8 +868,16 @@ $.extend(B.Hand.prototype, B.Printable);
 
 
 /**
+ * A list of the states a Hand can be in which are 'playable', meaning they can
+ * still accept new cards or other actions.
+ * @type Array.<string>
+ */
+B.Hand.PLAYABLES = ['pair', 'hit'];
+
+
+/**
  * This Hand just went over 21. The player immediately loses any bet
- * associated with this Hand and the Hand's cards are discarded.
+ * associated with this Hand and the Hand is marked 'busted'.
  */
 B.Hand.prototype.bust = function() {
 	var fsm;
@@ -843,8 +885,6 @@ B.Hand.prototype.bust = function() {
 	fsm = this.getFSM();
 	fsm.bust();
 
-	// Notify the Game. This is key so the Game is aware of state changes with
-	// the Hands. We could do this via pub/sub signaling as an alternative.
 	this.getGame().bust(this);
 };
 
@@ -859,18 +899,25 @@ B.Hand.prototype.double = function() {
 		cards,
 		game;
 
+	if (!this.canDouble()) {
+		throw new Error('InvalidOperation: Dealer hand cannot be doubled.');
+	}
+
 	fsm = this.getFSM();
 	fsm.double();
 
-	// The player must have enough chips to support this operation or the
-	// increase fails.
+	// This will throw an exception if the bet isn't supportable.
 	this.increaseBet(this.getBet());
-	
+
+	// Add a card to the receiver and check to see if we busted.
 	game = this.getGame();
-
+	cards = this.getCards();
 	cards.push(game.getShoe().deal());
+	if (this.getScore() > 21) {
+		this.bust();
+		return;
+	}
 
-	// Notify Game of any "terminal state" for a Hand.
 	this.getGame().double(this);
 };
 
@@ -885,7 +932,7 @@ B.Hand.prototype.getMaximumBet = function() {
 
 
 /**
- * Returns the minimum bet for a Hand. This represents "table stakes".
+ * Returns the minimum bet for a Hand. This represents 'table stakes'.
  * @return {number} The minimum bet.
  */
 B.Hand.prototype.getMinimumBet = function() {
@@ -896,8 +943,9 @@ B.Hand.prototype.getMinimumBet = function() {
 /**
  * Returns the score of the Hand. When aces are included in the Hand they
  * are counted as 11 unless such a count would cause the Hand to bust, in
- * which case they are counted as 1.
- * @return {number}
+ * which case they are counted as 1. NOTE that the current version of this
+ * method exposes hole-card values.
+ * @return {number} The score.
  */
 B.Hand.prototype.getScore = function() {
 	var s,
@@ -906,9 +954,10 @@ B.Hand.prototype.getScore = function() {
 
 	s = 0;
 	aces = 0;
-
 	cards = this.getCards();
 
+	// Iterate over cards, summing the values of all non-Aces and counting aces.
+	// We'll add Ace values in a second phase.
 	cards.map(function(card) {
 		var value;
 
@@ -920,6 +969,8 @@ B.Hand.prototype.getScore = function() {
 		s += value;
 	});
 
+	// Process Aces. The approach here is that if the Ace as an 11 plus any
+	// other Aces as 1's works we keep the 11, otherwise we use 1 for value.
 	while (aces--) {
 		if (s + 11 + aces > 21) {
 			s += 1;
@@ -957,7 +1008,6 @@ B.Hand.prototype.hasHoleCards = function() {
 /**
  * Adds a card to the Hand, provided that the current state allows it.
  * @param {B.Card} card The new card to add to the Hand.
- * @return {B.Hand} The receiver.
  */
 B.Hand.prototype.hit = function(card) {
 	var fsm,
@@ -974,8 +1024,6 @@ B.Hand.prototype.hit = function(card) {
 	if (this.getScore() > 21) {
 		this.bust();
 	}
-
-	return this;
 };
 
 
@@ -985,9 +1033,12 @@ B.Hand.prototype.hit = function(card) {
  * @param {number} amount The amount to increase the bet.
  */
 B.Hand.prototype.increaseBet = function(amount) {
-	var player;
+	var player,
+		newBet,
+		bet;
 
-	if ((bet + amount) > this.getMaximumBet()) {
+	newBet = this.getBet() + amount;
+	if (newBet > this.getMaximumBet()) {
 		throw new Error('Bet exceeds maximum.');
 	}
 
@@ -996,16 +1047,19 @@ B.Hand.prototype.increaseBet = function(amount) {
 		throw new Error('Bet exceeds player holdings.');
 	}
 
-	// Remove funds from the player and escrow them with the Hand.
-	player.increaseBet(hand, amount);
+	// Remove funds from the player and escrow them with the Hand. NOTE we set
+	// the amount negative since the adjustHoldings call is used for both
+	// increasing and decreasing holdings.
+	player.adjustHoldings(amount * -1);
+	this._setBet(newBet);
 };
 
 
 /**
- * Officially "Blackjack" only occurs when there are two cards, an Ace and a
- * card with a value of 10. Other combinations which score 21 are "twenty-one"
- * but not "blackjack".
- * @return {boolean} True if the Hand represents a _visible_ Blackjack value.
+ * Officially 'Blackjack' only occurs when there are two cards, an Ace and a
+ * card with a value of 10. Other combinations which score 21 are 'twenty-one'
+ * but not 'blackjack'. Two blackjacks are a push but blackjack wins over 21.
+ * @return {boolean} True if the Hand represents a blackjack.
  */
 B.Hand.prototype.isBlackjack = function() {
 	var cards,
@@ -1017,13 +1071,11 @@ B.Hand.prototype.isBlackjack = function() {
 
 	cards = this.getCards();
 
-	// Two cards, second one can't be a hole card (don't prematurely expose
-	// blackjacks in Dealer's hand), and score must equal 21.
+	// Two cards and score must equal 21.
 	bjack = cards.length === 2 &&
 		!cards[1].isHoleCard() &&
 		this.getScore() === 21;
 
-	// Update our state to keep from doing "stoopid" things :).
 	if (bjack) {
 		this.getFSM().blackjack();
 		this.getGame().blackjack(this);
@@ -1033,17 +1085,42 @@ B.Hand.prototype.isBlackjack = function() {
 };
 
 
-/**	
- * This is a losing Hand. The bet associated with this Hand is forfeited.
+/**
+ * Returns true if the hand is in a state that allows further actions. For
+ * example, 'busted', 'doubled', or 'surrendered' are non-playable states while
+ * 'pair' and 'hit' are playable.
+ * @return {boolean} True if the Hand supports additional cards/actions.
  */
-B.Hand.prototype.lose = function() {
+B.Hand.prototype.isPlayable = function() {
+	return B.Hand.PLAYABLES.indexOf(this.getFSM().current) !== -1;
+};
 
-	// TODO
-	//this.discard();
 
-	// The bet has already been removed from the player's holdings at the
-	// time the bet was placed.
-	return;
+/**
+ * Returns true if the Hand is truly splittable, meaning it is a pair of cards
+ * which have the same value.
+ * @return {boolean} Whether the hand is truly splittable.
+ */
+B.Hand.prototype.canSplit = function() {
+	var fsm,
+		cards;
+
+	// Dealer can't split.
+	if (!this.getPlayer()) {
+		return false;
+	}
+
+	fsm = this.getFSM();
+	cards = this.getCards();
+
+	// If we're in the right state to be able to split the other question is do
+	// we have two Cards of the same index from 1 to 13 ? 
+	if (fsm.can('split')) {
+		if (cards[0].getIndex() === cards[1].getIndex()) {
+			return true;
+		}
+	}
+	return false;
 };
 
 
@@ -1058,17 +1135,35 @@ B.Hand.prototype.onpair = function() {
 };
 
 
-// Now highjack our mixin version and wrap it so we can augment it.
+/**
+ * Instructs the Hand to pay out. This is invoked on Hands whose score is higher
+ * than that of the Dealer's Hand without busting.
+ * @param {number} odds A multipler for odds. 3:2 would be 1.5 for example.
+ */
+B.Hand.prototype.pay = function(odds) {
+	var player,
+		bet;
+
+	player = this.getPlayer();
+	if (player) {
+		bet = this.getBet();
+		player.adjustHoldings(bet + (bet * odds));
+	}
+};
+
+
+// Highjack our mixin version of print so we can augment it.
 B.Hand.prototype._print = B.Hand.prototype.print;
+
 
 /**
  * Prints the Hand. Hands print their values/suits as well as their score, with
- * the exception that hole cards print as a "not" or "null" symbol and the score
+ * the exception that hole cards print as a 'not' or 'null' symbol and the score
  * is likewise disguised to keep from exposing the true value of the hand.
  * @return {string} The print string.
  */
 B.Hand.prototype.print = function() {
-	return this._print() + ' => ' + 
+	return this._print() + ' => ' +
 		(this.hasHoleCards() ? B.Card.HOLE_CARD : this.getScore());
 };
 
@@ -1078,13 +1173,13 @@ B.Hand.prototype.print = function() {
  * returned to the player's holdings.
  */
 B.Hand.prototype.push = function() {
+	var player;
 
-	// TODO
-	// The bet returns to the player on a tie.
-
-	player.adjustHoldings(this.getBet());
-
-	return;
+	player = this.getPlayer();
+	if (player) {
+		// The bet returns to the player on a tie.
+		player.adjustHoldings(this.getBet());
+	}
 };
 
 
@@ -1094,7 +1189,7 @@ B.Hand.prototype.push = function() {
  * @return {B.Hand} The receiver.
  */
 B.Hand.prototype.show = function() {
-	var cards, 
+	var cards,
 		holes;
 
 	holes = 0;
@@ -1110,10 +1205,12 @@ B.Hand.prototype.show = function() {
 	if (holes) {
 		// Test for blackjack now that everything's visible.
 		this.isBlackjack();
+
+		// TODO: If the dealer has blackjack and there were insurance bets they
+		// should pay out now.
 	}
 
 	// TODO: trigger rendering update.
-
 
 	return this;
 };
@@ -1126,14 +1223,35 @@ B.Hand.prototype.show = function() {
 B.Hand.prototype.split = function() {
 	var fsm;
 
+	if (!this.canSplit()) {
+		fsm = this.getFSM();
+		if (!fsm.can('split')) {
+			log('Error: InvalidStateTransition: Hand cannot transition ' +
+				'from: ' + fsm.current + ' state to: single state. ' +
+				'event split inappropriate in current state ' + fsm.current);
+		} else if (!this.getPlayer()) {
+			// Dealer hands can't be split.
+			throw new Error('InvalidOperation: Dealer hand cannot be split.');
+		}
+		return;
+	}
+
+	// Request help from the Game, where the new Hand must be registered.
+	this.getGame().split(this);
+};
+
+
+/**
+ * Stands, meaning the Hand transitions to a state where no more cards will be
+ * accepted.
+ */
+B.Hand.prototype.stand = function() {
+	var fsm;
+
 	fsm = this.getFSM();
-	fsm.split();
+	fsm.stand();
 
-	this.getFSM().split();
-
-	// TODO
-
-	// TODO: trigger rendering update.
+	this.getGame().stand(this);
 };
 
 
@@ -1142,34 +1260,21 @@ B.Hand.prototype.split = function() {
  * forfeit half of their current bet.
  */
 B.Hand.prototype.surrender = function() {
-	var fsm;
+	var fsm,
+		player;
+
+	if (!this.canSurrender()) {
+		throw new Error('InvalidOperation: Dealer hand cannot be surrendered.');
+	}
 
 	fsm = this.getFSM();
 	fsm.surrender();
 
-	// Notify Game of any "terminal state" for a Hand.
+	// Surrendering a Hand should return half the bet to the player.
+	player = this.getPlayer();
+	player.adjustHoldings(this.getBet() / 2.0);
+
 	this.getGame().surrender(this);
-
-	// TODO
-
-	//	owner.adjustHoldings(bet * -0.5);
-
-	// TODO: trigger rendering update.
-};
-
-
-/**
- * This is a winning Hand! The player's holdings are adjusted based on the
- * odds associated with the Hand (3:2 by default).
- */
-B.Hand.prototype.win = function() {
-	var fsm;
-
-	fsm = this.getFSM();
-	fsm.win();
-
-	// TODO
-	//owner.adjustHoldings(bet * (odds || 1.5));
 };
 
 
@@ -1205,6 +1310,7 @@ B.Game = function(opts) {
 	 */
 	options = opts || {};	// Simplify lookup/defaulting syntax below.
 
+
 	// TODO: replace anything we store as a single slot that could make sense as
 	// an option within our options object. We can migrate those getters back
 	// out as this.getOptions()[decks, min, max, ...]
@@ -1229,10 +1335,10 @@ B.Game = function(opts) {
 	 * The state machine which embodies the game state and transitions.
 	 * Effectively the game goes from a pregame state to dealing the initial
 	 * hands. From there all player hands are managed until no hands remain
-	 * "playable". Once that's true the game moves to the dealer. Before the
+	 * 'playable'. Once that's true the game moves to the dealer. Before the
 	 * dealer does anything else a player can opt for insurance _iff_ the
 	 * dealer's up-card is an Ace. Otherwise the dealer's hand is managed using
-	 * the rules for stay/hit until the dealer's hand is no longer "playable".
+	 * the rules for stay/hit until the dealer's hand is no longer 'playable'.
 	 * If the dealer doesn't bust a final scoring/payout phase is done and the
 	 * game ends, resetting to allow a new deal to begin or for the entire game
 	 * to be exited.
@@ -1241,28 +1347,32 @@ B.Game = function(opts) {
 	fsm = StateMachine.create({
 		initial: 'pregame',
 		error: function(evt, from, to, args, code, msg) {
-			var str = 'Game cannot transition from: ' + 
+			var str = 'Game cannot transition from: ' +
 				from + ' state to: ' + to + ' state. ' + msg;
 			throw new Error('InvalidStateTransition: ' + str);
 		},
 		events: [
 			{ name: 'deal', from: ['pregame', 'postgame'], to: 'dealing' },
 
+			// If the player is low on chips before the deal no hands are dealt
+			// and the state moves to buying.
+			{ name: 'buyin', from: 'dealing', to: 'buying' },
+
 			{ name: 'player', from: 'dealing', to: 'player' },
 			{ name: 'insure', from: 'player', to: 'insure' },
 			{ name: 'dealer', from: ['player', 'insure'], to: 'dealer' },
 
 			{ name: 'bust', from: 'dealer', to: 'bust'},
+
 			{ name: 'score', from: 'dealer', to: 'scoring' },
+			{ name: 'payout', from: 'scoring', to: 'postgame' },
 
-			{ name: 'payout', from: 'scoring', to: 'done' },
-
-			{ name: 'quit', from: '*', to: 'done' }
+			{ name: 'quit', from: '*', to: 'exited' }
 		]});
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Game transitioned from: ' + 
+		log('Game transitioned from: ' +
 			from + ' state to: ' + to + ' state.');
 	};
 
@@ -1391,6 +1501,7 @@ B.Game = function(opts) {
 	 * Defines the Hand played by the Dealer.
 	 * @param {B.Hand} hand The new Hand for the dealer.
 	 * @return {B.Hand} The new hand.
+	 * @private
 	 */
 	this._setDealer = function(hand) {
 		dealer = hand;
@@ -1413,7 +1524,10 @@ B.Game.DEFAULT = {
 	DECK_COUNT: 1,			// Default is a single-deck game.
 	HOLDINGS: 500,			// Default is 500 chips.
 	MAXIMUM_BET: 100,		// No more than 100 chips per Hand.
-	MINIMUM_BET: 1,			// 1 chip minimum.
+	MINIMUM_BET: 5,			// 1 chip minimum.
+	PAYOUT_BLACKJACK: 1.5,  // 3:2 on blackjack wins.
+	PAYOUT_INSURED: 2.0,    // 2:1 on insurance.
+	PAYOUT_WINNER: 1.0,     // 1:1 on normal wins.
 	PLAYER_COUNT: 1			// 1 player by default.
 };
 
@@ -1422,7 +1536,22 @@ B.Game.DEFAULT = {
  * Invoked when a Hand has a blackjack (Ace and ten-value).
  */
 B.Game.prototype.blackjack = function(hand) {
-	log('Blackjack!: ' + hand.print());
+
+	if (DEBUG) {
+		log('Hand is a Blackjack!: ' + hand.print());
+	}
+
+	// If it's the dealer's hand we show it immediately. Only another hand with
+	// a Blackjack will avoid a loss, and those hands merely tie/push.
+	if (hand === this.getDealer()) {
+		hand.show();
+
+		// When it's the dealers hand we move immediately to scoring/payout.	
+		this.payout();
+	}
+
+
+	// TODO: rendering
 };
 
 
@@ -1431,16 +1560,20 @@ B.Game.prototype.blackjack = function(hand) {
  * hands remaining are winners. If the Hand was a player's Hand then it is
  * discarded from the Game. If no active player Hands remain the Game ends and
  * the option to deal a new set of Hands is provided.
+ * @param {B.Hand} hand The hand which busted.
  */
 B.Game.prototype.bust = function(hand) {
-	log('Hand busted: ' + hand.print());
+
+	if (DEBUG) {
+		log('Hand busted: ' + hand.print());
+	}
 };
 
 
 /**
  * Handles state transition after the initial deal for a new game is done. While
  * the first two cards are being dealt to each player no UI actions are allowed.
- * Once the initial deal has completed the game moves into "player" mode in
+ * Once the initial deal has completed the game moves into 'player' mode in
  * which the player's state machine is in control of one or more Hands.
  */
 B.Game.prototype.deal = function() {
@@ -1451,6 +1584,12 @@ B.Game.prototype.deal = function() {
 
 	fsm = this.getFSM();
 	fsm.deal();
+
+	// If the player can't cover the minimum bet we can't continue.
+	if (this.getPlayer().getHoldings() < this.getMinimumBet()) {
+		fsm.buyin();
+		return;
+	}
 
 	// Note we keep using the current shoe, letting it refill on its own when it
 	// empties.	
@@ -1480,29 +1619,14 @@ B.Game.prototype.deal = function() {
 
 
 /**
- * Throws away the current Hands and prepares for a new deal().
- * @return {B.Game} The receiver.
+ * Responds to notifications that a Hand doubled.
+ * @param {B.Hand} hand The hand which doubled.
  */
-B.Game.prototype.discard = function() {
+B.Game.prototype.double = function(hand) {
 
-	this.getHands().length = 0;
-	this._setDealer = null;
-
-	return this;
-};
-
-
-/**
- */
-B.Game.prototype.payout = function() {
-	var fsm;
-
-	fsm = this.getFSM();
-	fsm.payout();
-
-	this.getHands().map(function(hand) {
-		hand.win();
-	});
+	if (DEBUG) {
+		log('Hand doubled: ' + hand.print());
+	}
 };
 
 
@@ -1516,12 +1640,7 @@ B.Game.prototype.play = function() {
 	fsm = this.getFSM();
 	fsm.player();
 
-	// At this point initial hands are dealt and rendered. Now it's up to the
-	// event handlers on the hands themselves to tell us what's going on. At
-	// some point those handlers will trigger such that the Game can recognize
-	// that all hands have run out of playing options (they've busted, doubled,
-	// or stood and can't take more cards). When that happens the game will
-	// transition from player to insurance or dealer state.
+	return this;
 };
 
 
@@ -1539,6 +1658,9 @@ B.Game.prototype.quit = function() {
 
 
 /**
+ * Renders the Hands being played. This method can be called multiple times as
+ * the Hands change during play.
+ * @param {Function} callback A function to call when rendering is finished.
  */
 B.Game.prototype.renderHands = function(callback) {
 
@@ -1551,6 +1673,8 @@ B.Game.prototype.renderHands = function(callback) {
 
 
 /**
+ * Renders the overall Game table. This method should only be called once.
+ * @param {Function} callback A function to call when rendering is finished.
  */
 B.Game.prototype.renderTable = function(callback) {
 
@@ -1563,11 +1687,86 @@ B.Game.prototype.renderTable = function(callback) {
 
 
 /**
+ * Score each Hand and pay any winners, notify losers, and clean up the round.
+ */
+B.Game.prototype.score = function() {
+
+	if (DEBUG) {
+		log('Scoring hands');
+	}
+
+	// TODO:
+};
+
+
+/**
+ * Responds to notifications that a Hand wants to split. NOTE that unlike the
+ * other Hand-related notifications, this one uses the Game to do the work.
+ * @param {B.Hand} hand The hand which split.
+ */
+B.Game.prototype.split = function(hand) {
+	var cards,
+		card,
+		hand2,
+		shoe;
+
+	if (DEBUG) {
+		log('Hand split: ' + hand.print());
+	}
+
+	// Create the new hand and add it to our list.
+	hand2 = new B.Hand(this, hand.getPlayer());
+	this.getHands().push(hand2);
+
+	// Split the cards between the two hands.
+	cards = hand.getCards();
+	card = cards.pop();
+	hand2.getCards().push(card);
+
+	// Set old hand from 'pair' to 'single'
+	hand.getFSM().split();
+	// Set new hand to 'single' from 'empty'.
+	hand2.getFSM().hit();
+
+	// Add a new card to both hands to return them to 'pair' state.
+	shoe = this.getShoe();
+	hand.hit(shoe.deal());
+	hand2.hit(shoe.deal());
+
+	return;
+};
+
+
+/**
+ * Responds to notifications that a Hand is standing pat.
+ * @param {B.Hand} hand The hand which is standing pat.
+ */
+B.Game.prototype.stand = function(hand) {
+
+	if (DEBUG) {
+		log('Hand stands: ' + hand.print());
+	}
+};
+
+
+/**
  * Start a new game, triggering initial rendering and dealing to start a Hand.
  */
 B.Game.prototype.start = function() {
 	// Render the game table baseline, and deal when that's completed.
 	this.renderTable(this.deal.bind(this));
+};
+
+
+/**
+ * Responds to notifications that a Hand surrenders.
+ * @param {B.Hand} hand The hand which surrendered.
+ */
+B.Game.prototype.surrender = function(hand) {
+
+	if (DEBUG) {
+		log('Hand surrenders: ' + hand.print());
+	}
 };
 
 
@@ -1601,7 +1800,7 @@ B.handleGameClick = function() {
 /**
  */
 B.handleTestClick = function() {
-	
+
 	// TODO:	Fade out splash, fade in test console.
 
 	B.test = new B.Test(B.options);
@@ -1637,8 +1836,10 @@ B.reset = function() {
 
 	if (B.game) {
 		// TODO:	reverse the fade in/out for splash/game UI.
+		log();
 	} else {
 		// TODO:	reverse the fade in/out for splash/test UI.
+		log();
 	}
 
 	// Release references so GC can do it's thing.
