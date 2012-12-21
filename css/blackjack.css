@@ -246,6 +246,7 @@ For pixels (px) Declare this percent (%)
 }
 #controls button[off=true] {
   background-color: #360;
+  color: #999;
 }
 
 #pot {
@@ -374,6 +375,10 @@ For pixels (px) Declare this percent (%)
   color: white;
   font-size: 138.5%;
   cursor: pointer;
+}
+#bets button[off=true] {
+  background-color: #360;
+  color: #999;
 }
 
 #bets .name {

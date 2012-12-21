@@ -609,7 +609,8 @@ B.Shoe.prototype.fill = function() {
  * @constructor
  */
 B.Player = function(g, h) {
-	var game,
+	var bet,
+        game,
 		holdings;
 
 	// Validate game instance.
@@ -621,6 +622,15 @@ B.Player = function(g, h) {
 	if (!h) {
 		throw new Error('InvalidHoldings');
 	}
+
+
+    /**
+     * The amount of the player's initial bet, prior to a hand being dealt. Once
+     * a hand is dealt this value is transferred to the hand. From that point
+     * forward bets are specific to the hand(s) being played.
+     * @type {number}
+     */
+    bet = 0;
 
 
 	/**
@@ -646,6 +656,15 @@ B.Player = function(g, h) {
 	};
 
 
+    /**
+     * Returns the initial bet for the player used to define the initial bet for
+     * any hands which may be split, doubled, etc.
+     */
+    this.getBet = function() {
+        return bet;
+    };
+
+
 	/**
 	 * Returns the game this Player is part of.
 	 * @return {B.Game} The game.
@@ -662,6 +681,27 @@ B.Player = function(g, h) {
 	this.getHoldings = function() {
 		return holdings;
 	};
+
+
+    /**
+     * Increases the receiver's initial bet value by amount.
+     * @param {number} amount The amount of increase.
+     */
+    this.increaseBet = function(amount) {
+        this.adjustHoldings(amount * -1);
+        bet += amount;
+        game.renderBet();
+    };
+
+
+    /**
+     * Places an initial bet.
+     * @param {number} amount The amount being bet.
+     */
+    this.placeBet = function(amount) {
+        this.adjustHoldings(amount * -1);
+        bet = amount;
+    };
 
 	return this;
 };
@@ -855,10 +895,9 @@ B.Hand = function(g, p) {
 	// Connect the various FSM transition hooks to Hand methods.
 	fsm.onpair = this.onpair.bind(this);
 
-	// If there's a player initialize the bet on the Hand to the minimum bet
-	// amount. If the Player can't cover the bet an exception is thrown.
+    // initial bet amount.
 	if (player) {
-		this.increaseBet(this.getMinimumBet());
+		bet = player.getBet();
 	}
 
 	return this;
@@ -1084,12 +1123,12 @@ B.Hand.prototype.increaseBet = function(amount) {
 
 	newBet = this.getBet() + amount;
 	if (newBet > this.getMaximumBet()) {
-		throw new Error('Bet exceeds maximum.');
+		throw new Error('Bet of ' + newBet +  ' exceeds maximum.');
 	}
 
 	player = this.getPlayer();
 	if (player.getHoldings() < amount) {
-		throw new Error('Bet exceeds player holdings.');
+		throw new Error('Bet of ' + amount + ' exceeds player holdings.');
 	}
 
 	// Remove funds from the player and escrow them with the Hand. NOTE we set
@@ -1097,6 +1136,8 @@ B.Hand.prototype.increaseBet = function(amount) {
 	// increasing and decreasing holdings.
 	player.adjustHoldings(amount * -1);
 	this._setBet(newBet);
+
+    this.getGame().renderBet();
 };
 
 
@@ -1408,7 +1449,8 @@ B.Game = function(opts) {
 			{ name: 'score', from: ['dealing', 'dealer'], to: 'scoring' },
 
             // We can move properly to 'done' once we've scored the game.
-			{ name: 'done', from: ['dealer', 'scoring'], to: 'postgame' },
+			{ name: 'done', from:
+                ['dealer', 'scoring'], to: 'postgame' },
 
             // We can quit from anywhere.
 			{ name: 'quit', from: '*', to: 'exited' }
@@ -1559,6 +1601,8 @@ B.Game = function(opts) {
 	fsm.onafterdealer = this.onafterdealer.bind(this);
 	fsm.onafterdone = this.onafterdone.bind(this);
 
+    player.placeBet(this.getMinimumBet());
+
 	return this;
 };
 
@@ -1679,6 +1723,7 @@ B.Game.prototype.checkHands = function() {
  */
 B.Game.prototype.deal = function() {
 	var fsm,
+        game,
 		dealer,
 		hands,
 		shoe,
@@ -1687,8 +1732,15 @@ B.Game.prototype.deal = function() {
 	fsm = this.getFSM();
 	fsm.deal();
 
+    game = this;
+
     // Update display for fresh visuals.
-    this.renderDeal();
+    this.renderDeal(function() {
+        // Update the player's holdings display, and the amount of the minimum bet
+        // to support the new hand.
+        d3.select('#holdings .value').text(game.getPlayer().getHoldings());
+        d3.select('#pot .value').text(game.getPlayer().getBet());
+    });
 
 	// If the player can't cover the minimum bet we can't continue.
 	if (this.getPlayer().getHoldings() < this.getMinimumBet()) {
@@ -1811,22 +1863,87 @@ B.Game.prototype.play = function() {
 
 
 /**
+ * Quits the game, turning off all active controls.
  */
 B.Game.prototype.quit = function() {
-	var fsm;
+	var fsm,
+        pot;
 
 	fsm = this.getFSM();
 	fsm.quit();
 
+    // Put any chips in the pot back in the player's holdings.
+    pot = d3.select('#pot .value').text();
+    d3.select('#pot .value').text('0');
+    this.getPlayer().adjustHoldings(parseInt(pot, 10));
+    d3.select('#holdings .value').text(this.getPlayer().getHoldings());
+
 	// TODO: clear all game state and redisplay the splash screen to support
 	// moving into test() mode or invoking a new game() sequence.
+    this.renderDeal();
+
+    // Turn off all button visuals.
+    d3.selectAll('#controls button').attr('off', true);
+    d3.selectAll('#bets button').attr('off', true);
+
+    // Disable all click handlers.
+    d3.selectAll('button').on('click', function() {
+        return;
+    });
 };
 
 
 /**
+ * Renders new data related to the betting process.
+ */
+B.Game.prototype.renderBet = function() {
+    var game,
+        player;
+
+    game = this;
+    player = game.getPlayer();
+    log('player bet: ' + player.getBet());
+
+    d3.selectAll('#bets button').attr('off', function() {
+        var bet,
+            amount;
+        // If the button amount would violate the rules (over max, money
+        // player doens't have) then it's off.
+        bet = player.getBet();
+        amount = parseInt(this.innerHTML);
+        if ((bet + amount) > player.getHoldings()) {
+            return true;
+        }
+        if ((bet + amount) > game.getMaximumBet()) {
+            return true;
+        }
+        return false;
+    });
+    d3.selectAll('#bets button').on('click', function() {
+        // If the button amount would violate the rules (over max, money
+        // player doens't have) then it should ignore clicks.
+        if (this.attributes.off.value === 'true') {
+            return;
+        }
+        player.increaseBet(parseInt(this.innerHTML, 10));
+    });
+
+    d3.select('#holdings .value').text(player.getHoldings());
+    d3.select('#pot .value').text(player.getBet());
+};
+
+
+/**
+ * Renders a fresh set of visuals for a fresh deal.
  */
 B.Game.prototype.renderDeal = function(callback) {
+
+    // Remove all active cards.
     d3.selectAll('.card').remove();
+
+    // Clear all current score values.
+    d3.select('#dealer .score').text('');
+    d3.select('#player .score').text('');
 };
 
 
@@ -1838,11 +1955,14 @@ B.Game.prototype.renderDeal = function(callback) {
 B.Game.prototype.renderHands = function(callback) {
     var dealer,
         player,
+        game,
         cards;
 
     if (DEBUG) {
         log('Rendering hands.');
     }
+
+    game = this;
 
     // Render the dealer's cards.
     dealer = this.getDealer();
@@ -1892,8 +2012,7 @@ B.Game.prototype.renderHands = function(callback) {
         });
 
 
-
-    // Connect event handlers.
+    // Connect hand-specific event handlers.
     d3.select('#hit').on('click',
         function() {
             if (player.isPlayable()) {
@@ -1907,6 +2026,15 @@ B.Game.prototype.renderHands = function(callback) {
             }
         });
 
+    if (player.isPlayable()) {
+        d3.selectAll('#bets button').attr('off', true);
+        // By default the buttons for betting are not active.
+        d3.selectAll('#bets button').on('click', function() {
+            return;
+        });
+    } else {
+        this.renderBet();
+    }
 
     // Update button states for visible feedback.
     d3.select('#hit').attr('off', function(d) {
@@ -1944,6 +2072,7 @@ B.Game.prototype.renderTable = function(callback) {
 
     game = this;
 
+    // Connect game-level event handlers.
     d3.select('#deal').on('click',
         function() {
             game.deal();
@@ -1954,6 +2083,16 @@ B.Game.prototype.renderTable = function(callback) {
             game.quit();
         });
 
+    // Update button states for visible feedback.
+    d3.select('#hit').attr('off', function(d) {
+        return true;
+    });
+    d3.select('#stand').attr('off', function(d) {
+        return true;
+    });
+
+    // Activate the betting buttons for "pre-deal" betting value capture.
+    this.renderBet();
 
 	if (typeof callback === 'function') {
 		callback();
@@ -2019,6 +2158,9 @@ B.Game.prototype.score = function() {
 			}
 		}
 	});
+
+    // Reset player's initial bet.
+    this.getPlayer().placeBet(this.getMinimumBet());
 
 	// Transition to 'postgame' state.
 	setTimeout(fsm.done.bind(fsm), 0);
@@ -2087,10 +2229,19 @@ B.Game.prototype.stand = function(hand) {
  * Start a new game, triggering initial rendering and dealing to start a Hand.
  */
 B.Game.prototype.start = function() {
+    var game;
+
 	log('Game on.');
 
-	// Render the game table baseline, and deal when that's completed.
-	this.renderTable(this.deal.bind(this));
+    game = this;
+
+	// Render the game table baseline.
+	this.renderTable(function() {
+        // Update the player's holdings display, and the amount of the minimum bet
+        // to support the new hand.
+        d3.select('#holdings .value').text(game.getPlayer().getHoldings());
+        d3.select('#pot .value').text(game.getPlayer().getBet());
+    });
 };
 
 
