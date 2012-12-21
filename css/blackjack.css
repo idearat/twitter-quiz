@@ -174,11 +174,13 @@ For pixels (px) Declare this percent (%)
 
 #limits {
   position: absolute;
-  top: 48px;
+  bottom: 48px;
   right: auto;
-  bottom: 30%;
+  top: 80%;
   left: 12px; 
   width: 96px;
+  color: white;
+  font-size: 182%;
 }
 
 .label {

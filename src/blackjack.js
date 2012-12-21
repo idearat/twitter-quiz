@@ -1450,7 +1450,7 @@ B.Game = function(opts) {
 
             // We can move properly to 'done' once we've scored the game.
 			{ name: 'done', from:
-                ['dealer', 'scoring'], to: 'postgame' },
+                ['dealer', 'scoring', 'postgame'], to: 'postgame' },
 
             // We can quit from anywhere.
 			{ name: 'quit', from: '*', to: 'exited' }
@@ -1838,7 +1838,10 @@ B.Game.prototype.onafterdealer = function() {
 		dealer.hit(shoe.deal());
 	}
 
-	this.score();
+    // If the hand busted over the hit() it'll already be on its way to scoring.
+    if (dealer.getScore() <= 21) {
+	    this.score();
+    }
 };
 
 
@@ -1846,6 +1849,8 @@ B.Game.prototype.onafterdealer = function() {
  * Processes the final done state transition.
  */
 B.Game.prototype.onafterdone = function() {
+
+    this.renderHands();
 	log('Game over.');
 };
 
@@ -2025,6 +2030,12 @@ B.Game.prototype.renderHands = function(callback) {
                 player.stand();
             }
         });
+    d3.select('#surrender').on('click',
+        function() {
+            if (player.getFSM().can('surrender')) {
+                player.surrender();
+            }
+        });
 
     if (player.isPlayable()) {
         d3.selectAll('#bets button').attr('off', true);
@@ -2042,6 +2053,9 @@ B.Game.prototype.renderHands = function(callback) {
     });
     d3.select('#stand').attr('off', function(d) {
         return !player.isPlayable();
+    });
+    d3.select('#surrender').attr('off', function(d) {
+        return !player.getFSM().can('surrender');
     });
     d3.select('#deal').attr('off', function(d) {
         return player.isPlayable();
@@ -2088,6 +2102,9 @@ B.Game.prototype.renderTable = function(callback) {
         return true;
     });
     d3.select('#stand').attr('off', function(d) {
+        return true;
+    });
+    d3.select('#surrender').attr('off', function(d) {
         return true;
     });
 
