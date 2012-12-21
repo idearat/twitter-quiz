@@ -769,8 +769,8 @@ B.Hand = function(g, p) {
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Hand transitioned from: ' +
-			from + ' state to: ' + to + ' state.');
+		log('Hand event: ' + evt + ' from: ' +
+			from + ' to: ' + to + '.');
 	};
 
 	if (DEBUG) {
@@ -876,6 +876,14 @@ B.Hand.PLAYABLES = ['pair', 'hit'];
 
 
 /**
+ * A list of the states a Hand can be in which are 'scoreable', meaning they
+ * should be checked during scoring as a possible winning hand.
+ * @type Array.<string>
+ */
+B.Hand.SCOREABLES = ['standing', 'doubled', 'blackjack'];
+
+
+/**
  * This Hand just went over 21. The player immediately loses any bet
  * associated with this Hand and the Hand is marked 'busted'.
  */
@@ -886,6 +894,34 @@ B.Hand.prototype.bust = function() {
 	fsm.bust();
 
 	this.getGame().bust(this);
+};
+
+
+/**
+ * Returns true if the Hand is truly splittable, meaning it is a pair of cards
+ * which have the same value.
+ * @return {boolean} Whether the hand is truly splittable.
+ */
+B.Hand.prototype.canSplit = function() {
+	var fsm,
+		cards;
+
+	// Dealer can't split.
+	if (!this.getPlayer()) {
+		return false;
+	}
+
+	fsm = this.getFSM();
+	cards = this.getCards();
+
+	// If we're in the right state to be able to split the other question is do
+	// we have two Cards of the same index from 1 to 13 ? 
+	if (fsm.can('split')) {
+		if (cards[0].getIndex() === cards[1].getIndex()) {
+			return true;
+		}
+	}
+	return false;
 };
 
 
@@ -1062,22 +1098,25 @@ B.Hand.prototype.increaseBet = function(amount) {
  * @return {boolean} True if the Hand represents a blackjack.
  */
 B.Hand.prototype.isBlackjack = function() {
-	var cards,
+	var fsm,
+        cards,
 		bjack;
 
 	if (DEBUG) {
 		log('Checking for blackjack on Hand: ' + this.print());
 	}
 
+    fsm = this.getFSM();
+    if (fsm.current === 'blackjack') {
+        return true;
+    }
+
 	cards = this.getCards();
 
 	// Two cards and score must equal 21.
-	bjack = cards.length === 2 &&
-		!cards[1].isHoleCard() &&
-		this.getScore() === 21;
-
+	bjack = cards.length === 2 && this.getScore() === 21;
 	if (bjack) {
-		this.getFSM().blackjack();
+		fsm.blackjack();
 		this.getGame().blackjack(this);
 	}
 
@@ -1097,30 +1136,12 @@ B.Hand.prototype.isPlayable = function() {
 
 
 /**
- * Returns true if the Hand is truly splittable, meaning it is a pair of cards
- * which have the same value.
- * @return {boolean} Whether the hand is truly splittable.
+ * True is the Hand is in a state that means it's worth scoring. For example,
+ * 'busted' and 'surrendered' are not worth scoring.
+ * @return {boolean} True if the Hand is worth scoring.
  */
-B.Hand.prototype.canSplit = function() {
-	var fsm,
-		cards;
-
-	// Dealer can't split.
-	if (!this.getPlayer()) {
-		return false;
-	}
-
-	fsm = this.getFSM();
-	cards = this.getCards();
-
-	// If we're in the right state to be able to split the other question is do
-	// we have two Cards of the same index from 1 to 13 ? 
-	if (fsm.can('split')) {
-		if (cards[0].getIndex() === cards[1].getIndex()) {
-			return true;
-		}
-	}
-	return false;
+B.Hand.prototype.isScoreable = function() {
+	return B.Hand.SCOREABLES.indexOf(this.getFSM().current) !== -1;
 };
 
 
@@ -1142,12 +1163,20 @@ B.Hand.prototype.onpair = function() {
  */
 B.Hand.prototype.pay = function(odds) {
 	var player,
-		bet;
+		bet,
+		winnings;
 
 	player = this.getPlayer();
 	if (player) {
 		bet = this.getBet();
-		player.adjustHoldings(bet + (bet * odds));
+		winnings = bet + (bet * odds);
+		player.adjustHoldings(winnings);
+
+		if (DEBUG) {
+			// Note the use of _print here to leave off score.
+			log('Hand ' + this._print() + ' paying ' + odds +
+				' to 1 odds, or ' + winnings + '.');
+		}
 	}
 };
 
@@ -1173,12 +1202,20 @@ B.Hand.prototype.print = function() {
  * returned to the player's holdings.
  */
 B.Hand.prototype.push = function() {
-	var player;
+	var player,
+		bet;
 
 	player = this.getPlayer();
 	if (player) {
 		// The bet returns to the player on a tie.
-		player.adjustHoldings(this.getBet());
+		bet = this.getBet();
+		player.adjustHoldings(bet);
+
+		if (DEBUG) {
+			// Note the use of _print here to leave off score.
+			log('Hand ' + this._print() + ' pushed. Returning ' +
+				' bet of ' + bet);
+		}
 	}
 };
 
@@ -1203,14 +1240,9 @@ B.Hand.prototype.show = function() {
 	});
 
 	if (holes) {
-		// Test for blackjack now that everything's visible.
-		this.isBlackjack();
-
-		// TODO: If the dealer has blackjack and there were insurance bets they
-		// should pay out now.
+		// TODO: trigger rendering update.
+		return this;
 	}
-
-	// TODO: trigger rendering update.
 
 	return this;
 };
@@ -1224,6 +1256,7 @@ B.Hand.prototype.split = function() {
 	var fsm;
 
 	if (!this.canSplit()) {
+		// Simulate consistent error messages with other operations.
 		fsm = this.getFSM();
 		if (!fsm.can('split')) {
 			log('Error: InvalidStateTransition: Hand cannot transition ' +
@@ -1358,22 +1391,26 @@ B.Game = function(opts) {
 			// and the state moves to buying.
 			{ name: 'buyin', from: 'dealing', to: 'buying' },
 
+			// Blackjack for dealer will mean straight to scoring.
+			{ name: 'blackjack', from: 'dealing', to: 'scoring' },
+
 			{ name: 'player', from: 'dealing', to: 'player' },
 			{ name: 'insure', from: 'player', to: 'insure' },
 			{ name: 'dealer', from: ['player', 'insure'], to: 'dealer' },
 
-			{ name: 'bust', from: 'dealer', to: 'bust'},
+			{ name: 'bust', from: 'dealer', to: 'scoring'},
+			{ name: 'score', from:
+                ['dealing', 'dealer'], to: 'scoring' },
 
-			{ name: 'score', from: 'dealer', to: 'scoring' },
-			{ name: 'payout', from: 'scoring', to: 'postgame' },
+			{ name: 'done', from: ['dealer', 'scoring'], to: 'postgame' },
 
 			{ name: 'quit', from: '*', to: 'exited' }
 		]});
 
 	// Configure a nice debugging log function to observe state transitions.
 	fsm.onchangestate = function(evt, from, to) {
-		log('Game transitioned from: ' +
-			from + ' state to: ' + to + ' state.');
+		log('Game event: ' + evt + ' from: ' +
+			from + ' to: ' + to + '.');
 	};
 
 	if (DEBUG) {
@@ -1510,7 +1547,8 @@ B.Game = function(opts) {
 
 
 	// Connect the various FSM transition hooks to game methods.
-	// TODO:
+	fsm.onafterdealer = this.onafterdealer.bind(this);
+	fsm.onafterdone = this.onafterdone.bind(this);
 
 	return this;
 };
@@ -1536,20 +1574,33 @@ B.Game.DEFAULT = {
  * Invoked when a Hand has a blackjack (Ace and ten-value).
  */
 B.Game.prototype.blackjack = function(hand) {
+	var prefix,
+        my;
+
+	hand.show();
 
 	if (DEBUG) {
-		log('Hand is a Blackjack!: ' + hand.print());
+		prefix = (hand === this.getDealer()) ? 'Dealer' : 'Hand';
+		log(prefix + ' Blackjack!: ' + hand.print());
 	}
 
 	// If it's the dealer's hand we show it immediately. Only another hand with
 	// a Blackjack will avoid a loss, and those hands merely tie/push.
 	if (hand === this.getDealer()) {
-		hand.show();
-
 		// When it's the dealers hand we move immediately to scoring/payout.	
-		this.payout();
-	}
-
+		this.getFSM().blackjack();
+		this.score();
+	} else {
+        // For player hands which transition to blackjack status we may have no
+        // remaining playable hands and need to transition. The tricky part here
+        // is that the dealer's hand is dealt to last, so any true blackjack on
+        // the part of a player hand will cause scoring against an incomplete
+        // dealer hand. We use a setTimeout to let the deal finish first.
+        my = this;
+        setTimeout(function() {
+            my.checkHands();
+        }, 0);
+    }
 
 	// TODO: rendering
 };
@@ -1563,10 +1614,47 @@ B.Game.prototype.blackjack = function(hand) {
  * @param {B.Hand} hand The hand which busted.
  */
 B.Game.prototype.bust = function(hand) {
+	var prefix;
 
 	if (DEBUG) {
-		log('Hand busted: ' + hand.print());
+		prefix = (hand === this.getDealer()) ? 'Dealer' : 'Hand';
+		log(prefix + ' busted: ' + hand.print());
 	}
+
+	this.checkHands();
+};
+
+
+/**
+ * Checks all player hands to see if any remain playable. If not this method
+ * will transition the game to the dealer state.
+ */
+B.Game.prototype.checkHands = function() {
+	var fsm,
+		hands,
+		done;
+
+	done = true;
+	hands = this.getHands();
+	hands.map(function(hand) {
+		if (hand.isPlayable()) {
+			done = false;
+		}
+	});
+
+	fsm = this.getFSM();
+	if (done) {
+        // No remaining playable hands. 
+        if (fsm.can('dealer')) {
+            this.dealer();
+        } else if (fsm.can('score')) {
+            this.score();
+        }
+	} else {
+        if (fsm.can('player')) {
+            this.play();
+        }
+    }
 };
 
 
@@ -1580,7 +1668,8 @@ B.Game.prototype.deal = function() {
 	var fsm,
 		dealer,
 		hands,
-		shoe;
+		shoe,
+		my;
 
 	fsm = this.getFSM();
 	fsm.deal();
@@ -1614,7 +1703,14 @@ B.Game.prototype.deal = function() {
 	});
 	dealer.hit(shoe.deal(true));	// Hole card.
 
-	this.renderHands(this.play.bind(this));
+	// Use a local var to bind 'this' in our callback below.
+	my = this;
+
+	// Use an embedded callback here. We need to check the FSM state before we
+	// decide whether to invoke a state transition after rendering.
+	this.renderHands(function() {
+        my.checkHands();
+	});
 };
 
 
@@ -1627,20 +1723,74 @@ B.Game.prototype.double = function(hand) {
 	if (DEBUG) {
 		log('Hand doubled: ' + hand.print());
 	}
+
+	this.checkHands();
 };
 
 
 /**
- * Invoked after the initial deal has occurred and the initial hands have
- * rendered. 
+ * Responds to state changes into the dealer state. Once we enter this state we
+ * play out the dealer's hand according to the 'hit rules' and then score the
+ * various Player hands.
+ */
+B.Game.prototype.onafterdealer = function() {
+	var dealer,
+		shoe,
+		hands,
+		done,
+        fsm;
+
+	dealer = this.getDealer();
+	dealer.show();
+	// TODO: render after show? 
+
+
+	// See if we have any scorable hands. If they all busted or surrendered do
+	// we really have the dealer hit and maybe bust? Or do we just claim victory
+	// for the house and transition to done?
+	done = true;
+	hands = this.getHands();
+	hands.map(function(hand) {
+		if (hand.isScoreable()) {
+			done = false;
+		}
+	});
+
+    // No scorable hands? Dealer/house wins.
+	if (done) {
+        fsm = this.getFSM();
+        fsm.done();
+        return;
+	}
+
+    // At least one scoreable hand. Dealer must play out.
+	shoe = this.getShoe();
+	while (dealer.getScore() < 17) {
+		dealer.hit(shoe.deal());
+	}
+
+	this.score();
+};
+
+
+/**
+ *
+ */
+B.Game.prototype.onafterdone = function() {
+	// TODO
+	log('Game over.');
+};
+
+
+/**
+ * Transitions the game to the player state. This state remains in effect until
+ * all Hands have been played. Then the dealer's hand is played out.
  */
 B.Game.prototype.play = function() {
 	var fsm;
 
 	fsm = this.getFSM();
 	fsm.player();
-
-	return this;
 };
 
 
@@ -1690,12 +1840,58 @@ B.Game.prototype.renderTable = function(callback) {
  * Score each Hand and pay any winners, notify losers, and clean up the round.
  */
 B.Game.prototype.score = function() {
+	var fsm,
+		hands,
+		dealer,
+		house,
+		busted,
+		bjack;
 
 	if (DEBUG) {
 		log('Scoring hands');
 	}
 
-	// TODO:
+	fsm = this.getFSM();
+    if (fsm.can('score')) {
+	    fsm.score();
+    }
+
+	dealer = this.getDealer();
+	house = dealer.getScore();
+	busted = house > 21;
+	bjack = dealer.isBlackjack();
+
+	hands = this.getHands();
+	hands.map(function(hand) {
+		var score;
+
+		if (!hand.isScoreable()) {
+			return;
+		}
+
+		if (hand.isBlackjack()) {
+			if (bjack) {
+				hand.push();
+			} else {
+				hand.pay(B.Game.DEFAULT.PAYOUT_BLACKJACK);
+			}
+			return;
+		}
+
+		// All other non-blackjack hands lose if the house has blackjack. We're
+		// only interested in hands that won.
+		if (!bjack) {
+			score = hand.getScore();
+			if (score === house) {
+				hand.push();
+			} else if (busted || (score > house)) {
+				hand.pay(B.Game.DEFAULT.PAYOUT_WINNER);
+			}
+		}
+	});
+
+	// Transition to 'postgame' state.
+	fsm.done();
 };
 
 
@@ -1733,7 +1929,9 @@ B.Game.prototype.split = function(hand) {
 	hand.hit(shoe.deal());
 	hand2.hit(shoe.deal());
 
-	return;
+	// Once the hands are split and rebuilt we check them. In the off chance
+	// they're both now Blackjack values we'd want to move directly to scoring.
+	this.checkHands();
 };
 
 
@@ -1746,6 +1944,8 @@ B.Game.prototype.stand = function(hand) {
 	if (DEBUG) {
 		log('Hand stands: ' + hand.print());
 	}
+
+	this.checkHands();
 };
 
 
@@ -1767,6 +1967,8 @@ B.Game.prototype.surrender = function(hand) {
 	if (DEBUG) {
 		log('Hand surrenders: ' + hand.print());
 	}
+
+	this.checkHands();
 };
 
 
