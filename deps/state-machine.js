@@ -80,7 +80,7 @@
           return func.apply(fsm, [name, from, to].concat(args));
         }
         catch(e) {
-			console.log(e.message);
+          console.log(e.message);
           return fsm.error(name, from, to, args, StateMachine.Error.INVALID_CALLBACK, "an exception occurred in a caller-provided callback function", e);
         }
       }
